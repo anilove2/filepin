@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
-const SUPABASE_URL  = "https://rvhtewlgraycqwfqiiig.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2aHRld2xncmF5Y3F3ZnFpaWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NTY2MjIsImV4cCI6MjA5MzEzMjYyMn0.YOo4MJBblfgOupTmGYipYyr056x1Lkm-al3i9KNZV9w";
+const SUPABASE_URL  = "https://ylkskjjzkyydeqgvyuop.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa3Nramp6a3l5ZGVxZ3Z5dW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2Mzk3MTcsImV4cCI6MjA5MzIxNTcxN30.eC1gnIASNR-40RBUB3B567-EnhaIfkECcKGMzRTjGVU";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── THEME ─────────────────────────────────────────────────────────────────────
