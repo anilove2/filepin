@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
-const SUPABASE_URL  = "https://ylkskjjzkyydeqgvyuop.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa3Nramp6a3l5ZGVxZ3Z5dW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2Mzk3MTcsImV4cCI6MjA5MzIxNTcxN30.eC1gnIASNR-40RBUB3B567-EnhaIfkECcKGMzRTjGVU";
+const SUPABASE_URL  = "https://ylkskjjzkyydeqgvyuop.supabase.co"; // ← replace with your new URL
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa3Nramp6a3l5ZGVxZ3Z5dW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2Mzk3MTcsImV4cCI6MjA5MzIxNTcxN30.eC1gnIASNR-40RBUB3B567-EnhaIfkECcKGMzRTjGVU"; // ← replace with your new anon key
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── THEME ─────────────────────────────────────────────────────────────────────
@@ -124,14 +124,13 @@ function LoginPage({ onLogin, onGoSignup, onForgot, dark, onToggle }) {
 
   async function login() {
     setErr(""); setLoading(true);
-    // username → look up email from profiles
+    // Look up real email from profiles table
     const { data: profile, error: pe } = await supabase
-      .from("profiles").select("id").eq("username", user.toLowerCase()).single();
+      .from("profiles").select("id, email").eq("username", user.toLowerCase()).single();
     if (pe || !profile) { setErr("Username not found."); setLoading(false); return; }
 
-    // get email from auth — we stored it at signup as email = username@filepin.io
-    const email = `${user.toLowerCase()}@filepin.internal`;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    // Sign in with the real email stored in profiles
+    const { data, error } = await supabase.auth.signInWithPassword({ email: profile.email, password: pass });
     if (error) { setErr("Incorrect password."); setLoading(false); return; }
     onLogin(data.user);
     setLoading(false);
@@ -190,7 +189,7 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     if (existing) { setErr("Username already taken. Choose another."); setLoading(false); return; }
 
     // Sign up — use internal email pattern
-    const internalEmail = `${form.username.toLowerCase()}@filepin.internal`;
+    const internalEmail = form.email;
     const { data, error } = await supabase.auth.signUp({
       email: internalEmail,
       password: form.password,
@@ -198,11 +197,12 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     });
     if (error) { setErr(error.message); setLoading(false); return; }
 
-    // Insert profile
+    // Insert profile (store real email for login lookup)
     await supabase.from("profiles").insert({
       id: data.user.id,
       username: form.username.toLowerCase(),
       display_name: form.name,
+      email: form.email,
     });
 
     setLoading(false); setDone(true);
