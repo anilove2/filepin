@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
@@ -125,14 +125,10 @@ function LoginPage({ onLogin, onGoSignup, onForgot, dark, onToggle }) {
 
   async function login() {
     setErr(""); setLoading(true);
-    // username → look up email from profiles
-    const { data: profile, error: pe } = await supabase
-      .from("profiles").select("id").eq("username", user.toLowerCase()).single();
-    if (pe || !profile) { setErr("Username not found."); setLoading(false); return; }
-
-    // get email from auth — we stored it at signup as email = username@filepin.io
-    const email = `${user.toLowerCase()}@filepin.internal`;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    const { data: prof, error: pe } = await supabase
+      .from("profiles").select("id, email").eq("username", user.toLowerCase()).single();
+    if (pe || !prof) { setErr("Username not found."); setLoading(false); return; }
+    const { data, error } = await supabase.auth.signInWithPassword({ email: prof.email, password: pass });
     if (error) { setErr("Incorrect password."); setLoading(false); return; }
     onLogin(data.user);
     setLoading(false);
@@ -141,7 +137,7 @@ function LoginPage({ onLogin, onGoSignup, onForgot, dark, onToggle }) {
   return (
     <div style={{ minHeight:"100vh", background:t.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden", transition:"background 0.3s", padding:20 }}>
       <BgGrid t={t}/>
-      <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 32px", zIndex:2 }}>
+      <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", zIndex:2 }}>
         <Logo t={t}/><ThemeToggle dark={dark} onToggle={onToggle} t={t}/>
       </div>
       <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:"44px 40px", width:"100%", maxWidth:420, position:"relative", zIndex:1, boxShadow:t.shadow, marginTop:48 }}>
@@ -190,20 +186,20 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     const { data: existing } = await supabase.from("profiles").select("id").eq("username", form.username.toLowerCase()).single();
     if (existing) { setErr("Username already taken. Choose another."); setLoading(false); return; }
 
-    // Sign up — use internal email pattern
-    const internalEmail = `${form.username.toLowerCase()}@filepin.internal`;
+    // Sign up with real email
     const { data, error } = await supabase.auth.signUp({
-      email: internalEmail,
+      email: form.email,
       password: form.password,
       options: { data: { display_name: form.name, username: form.username.toLowerCase(), real_email: form.email } }
     });
     if (error) { setErr(error.message); setLoading(false); return; }
 
-    // Insert profile
+    // Insert profile with email for login lookup
     await supabase.from("profiles").insert({
       id: data.user.id,
       username: form.username.toLowerCase(),
       display_name: form.name,
+      email: form.email,
     });
 
     setLoading(false); setDone(true);
@@ -213,7 +209,7 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
   return (
     <div style={{ minHeight:"100vh", background:t.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", overflow:"hidden", transition:"background 0.3s", padding:"20px 16px" }}>
       <BgGrid t={t}/>
-      <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 32px", zIndex:2 }}>
+      <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", zIndex:2 }}>
         <Logo t={t}/><ThemeToggle dark={dark} onToggle={onToggle} t={t}/>
       </div>
       {done ? (
@@ -405,13 +401,13 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
   }
 
   function copyLink(f) {
-    const url = `${window.location.origin}?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
+    const url = `${window.location.origin}/file?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
     navigator.clipboard?.writeText(url);
     setCopied(f.id); setTimeout(()=>setCopied(null), 2000);
   }
 
   function openFile(f) {
-    const url = `${window.location.origin}?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
+    const url = `${window.location.origin}/file?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
     window.open(url, "_blank");
   }
 
@@ -421,13 +417,13 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
     <div style={{ minHeight:"100vh", background:t.bg, fontFamily:"'Playfair Display',Georgia,serif", transition:"background 0.3s" }}>
       {showUpload && <UploadModal onClose={()=>setShowUpload(false)} onUpload={f=>setFiles(p=>[f,...p])} t={t} userId={authUser.id} username={profile.username}/>}
 
-      <nav style={{ position:"sticky", top:0, zIndex:100, background:t.navBg, backdropFilter:"blur(12px)", borderBottom:`1px solid ${t.border}`, padding:"14px 32px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <Logo t={t}/>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <nav style={{ position:"sticky", top:0, zIndex:100, background:t.navBg, backdropFilter:"blur(12px)", borderBottom:`1px solid ${t.border}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"nowrap" }}>
+        <Logo t={t} size={18}/>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <ThemeToggle dark={dark} onToggle={onToggle} t={t}/>
-          <div style={{display:"flex",alignItems:"center",gap:8,background:t.pill,border:`1px solid ${t.border}`,borderRadius:20,padding:"6px 14px"}}>
-            <div style={{width:26,height:26,borderRadius:"50%",background:t.accent,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}}>{profile.displayName[0]}</div>
-            <span style={{color:t.text,fontSize:14,whiteSpace:"nowrap"}}>@{profile.username}</span>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:t.pill,border:`1px solid ${t.border}`,borderRadius:20,padding:"5px 10px"}}>
+            <div style={{width:24,height:24,borderRadius:"50%",background:t.accent,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:11,fontWeight:700,flexShrink:0}}>{profile.displayName[0]}</div>
+            <span style={{color:t.text,fontSize:13,whiteSpace:"nowrap",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>@{profile.username}</span>
           </div>
           <LogoutBtn onLogout={onLogout} t={t}/>
         </div>
@@ -607,13 +603,330 @@ function PublicPage({ username, filename, onBack, dark, onToggle }) {
   );
 }
 
-// ── AUTH CONTEXT ─────────────────────────────────────────────────────────────
+// ── PROTECTED ROUTE ─────────────────────────────────────────────────────────
 function ProtectedRoute({ children, authUser, profile }) {
   if (!authUser || !profile) return <Navigate to="/login" replace />;
   return children;
 }
 
+// ── PUBLIC FILE WRAPPER ───────────────────────────────────────────────────────
+function PublicFilePage({ dark, onToggle }) {
+  const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const username = params.get("u");
+  const filename = params.get("f");
+  if (!username || !filename) return <Navigate to="/login" replace />;
+  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
+}
+
+// ── LANDING PAGE ──────────────────────────────────────────────────────────────
+function LandingPage() {
+  const navigate = useNavigate();
+  const t = T.dark;
+  return (
+    <div style={{minHeight:"100vh",background:"#060b13",color:"#e2eeff",fontFamily:"'DM Sans',sans-serif",overflowX:"hidden"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,800;0,900;1,700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        .lp-reveal{opacity:0;transform:translateY(24px);transition:opacity 0.7s ease,transform 0.7s ease;}
+        .lp-reveal.vis{opacity:1;transform:translateY(0);}
+        .lp-card:hover{border-color:rgba(59,130,246,0.35)!important;transform:translateY(-4px);box-shadow:0 20px 40px rgba(0,0,0,0.3)!important;}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @media(max-width:600px){
+          .lp-nav-links{display:none!important;}
+          .lp-steps{grid-template-columns:1fr 1fr!important;}
+          .lp-sec-grid{grid-template-columns:1fr!important;}
+          .lp-hero-title{font-size:42px!important;letter-spacing:-1px!important;}
+          .lp-tagrow{flex-direction:column!important;gap:0!important;}
+          .lp-tagword{font-size:11px!important;}
+          .lp-stats{flex-wrap:wrap!important;}
+          .lp-stat{border-right:none!important;border-bottom:1px solid #1a2f50;padding:12px 20px!important;}
+        }
+      `}</style>
+
+      {/* NAV */}
+      <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 32px",background:"rgba(6,11,19,0.9)",backdropFilter:"blur(20px)",borderBottom:"1px solid #1a2f50"}}>
+        <div style={{display:"flex",alignItems:"center",gap:9}}>
+          <svg width="26" height="26" viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" fill="#3b82f6" opacity="0.15"/><rect x="2" y="2" width="24" height="24" rx="6" stroke="#3b82f6" strokeWidth="1.5"/><path d="M9 14.5L12.5 18L19 11" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:"#e2eeff",letterSpacing:-0.5}}>File<span style={{color:"#3b82f6"}}>PIN</span></span>
+        </div>
+        <div className="lp-nav-links" style={{display:"flex",gap:28,listStyle:"none"}}>
+          {["#what","#how","#features","#security"].map((h,i)=>
+            <a key={h} href={h} style={{color:"#4a6a9a",textDecoration:"none",fontSize:14,transition:"color 0.2s"}}
+              onMouseEnter={e=>e.target.style.color="#e2eeff"} onMouseLeave={e=>e.target.style.color="#4a6a9a"}>
+              {["What's it for","How it works","Features","Security"][i]}
+            </a>
+          )}
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>navigate("/login")} style={{background:"transparent",border:"1px solid #1a2f50",color:"#4a6a9a",padding:"8px 18px",borderRadius:8,fontSize:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.target.style.borderColor="#3b82f6";e.target.style.color="#3b82f6"}} onMouseLeave={e=>{e.target.style.borderColor="#1a2f50";e.target.style.color="#4a6a9a"}}>
+            Sign In
+          </button>
+          <button onClick={()=>navigate("/signup")} style={{background:"#3b82f6",border:"none",color:"#fff",padding:"8px 18px",borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",boxShadow:"0 4px 16px rgba(59,130,246,0.3)"}}>
+            Get Started →
+          </button>
+        </div>
+      </nav>
+
+      {/* HERO */}
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"130px 20px 80px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.04) 1px,transparent 1px)",backgroundSize:"52px 52px"}}/>
+        <div style={{position:"absolute",top:"20%",left:"50%",transform:"translateX(-50%)",width:700,height:400,background:"radial-gradient(ellipse,rgba(59,130,246,0.18) 0%,transparent 65%)",pointerEvents:"none"}}/>
+        <div style={{position:"relative",zIndex:1,maxWidth:780,width:"100%"}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.2)",borderRadius:20,padding:"7px 18px",fontSize:12,fontFamily:"'DM Mono',monospace",color:"#60a5fa",marginBottom:32,animation:"fadeUp 0.5s ease both",letterSpacing:0.5}}>
+            <span style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",animation:"blink 2s infinite",display:"inline-block"}}/>
+            Secure · Instant · Always Accessible
+          </div>
+          <h1 className="lp-hero-title" style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(48px,8vw,88px)",fontWeight:900,lineHeight:1.05,letterSpacing:-2,color:"#e2eeff",marginBottom:24,animation:"fadeUp 0.5s 0.1s ease both"}}>
+            Your important files.<br/>
+            <span style={{WebkitTextStroke:"1.5px rgba(59,130,246,0.6)",color:"transparent"}}>One</span> link.{" "}
+            <span style={{color:"#3b82f6"}}>One</span> PIN.
+          </h1>
+          <div className="lp-tagrow" style={{display:"flex",justifyContent:"center",gap:0,marginBottom:28,flexWrap:"wrap",animation:"fadeUp 0.5s 0.15s ease both"}}>
+            {["One Link","One PIN","Any File","Anytime"].map((w,i)=>(
+              <div key={w} className="lp-tagword" style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:"#3b82f6",padding:"7px 18px",border:"1px solid rgba(59,130,246,0.2)",background:"rgba(59,130,246,0.05)",letterSpacing:1,textTransform:"uppercase"}}>
+                {w}
+              </div>
+            ))}
+          </div>
+          <p style={{fontSize:17,color:"#4a6a9a",maxWidth:560,margin:"0 auto 40px",lineHeight:1.75,fontWeight:300,animation:"fadeUp 0.5s 0.2s ease both"}}>
+            FilePIN is your personal file space for the things that matter —
+            <strong style={{color:"#e2eeff",fontWeight:500}}> certificates, reports, books, study material.</strong>{" "}
+            Upload once. Access anywhere with a link and PIN.
+            <strong style={{color:"#e2eeff",fontWeight:500}}> No app needed for recipients.</strong>
+          </p>
+          <div style={{display:"flex",justifyContent:"center",gap:12,flexWrap:"wrap",marginBottom:52,animation:"fadeUp 0.5s 0.25s ease both"}}>
+            <button onClick={()=>navigate("/signup")} style={{background:"#3b82f6",color:"#fff",border:"none",padding:"14px 34px",borderRadius:10,fontSize:16,fontWeight:600,cursor:"pointer",boxShadow:"0 8px 28px rgba(59,130,246,0.3)",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}
+              onMouseEnter={e=>e.target.style.transform="translateY(-2px)"} onMouseLeave={e=>e.target.style.transform="translateY(0)"}>
+              Create Your Space Free →
+            </button>
+            <button onClick={()=>document.getElementById("what").scrollIntoView({behavior:"smooth"})} style={{background:"transparent",color:"#4a6a9a",border:"1px solid #1a2f50",padding:"14px 34px",borderRadius:10,fontSize:16,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all 0.2s"}}
+              onMouseEnter={e=>{e.target.style.borderColor="#3b82f6";e.target.style.color="#3b82f6"}} onMouseLeave={e=>{e.target.style.borderColor="#1a2f50";e.target.style.color="#4a6a9a"}}>
+              See what it's for
+            </button>
+          </div>
+          {/* URL demo */}
+          <div style={{display:"inline-block",background:"#0c1628",border:"1px solid #1a2f50",borderRadius:14,padding:"18px 28px",textAlign:"left",animation:"fadeUp 0.5s 0.3s ease both"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#4a6a9a",letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Your personal link</div>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:14,color:"#4a6a9a"}}>filepin.io/<span style={{color:"#3b82f6"}}>yourname</span>/<span style={{color:"#60a5fa"}}>document.pdf</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10,fontFamily:"'DM Mono',monospace",fontSize:12,color:"#4a6a9a"}}>
+              <span>PIN required:</span>
+              {[1,1,1,0].map((f,i)=><div key={i} style={{width:10,height:10,borderRadius:"50%",background:f?"#3b82f6":"transparent",border:f?"none":"1.5px solid #1a2f50"}}/>)}
+              <span>→ enter to unlock</span>
+            </div>
+            <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1a2f50",fontSize:12,color:"#22c55e",fontFamily:"'DM Mono',monospace"}}>✓ Access granted — file ready anywhere</div>
+          </div>
+          {/* Stats */}
+          <div className="lp-stats" style={{display:"flex",justifyContent:"center",marginTop:52,animation:"fadeUp 0.5s 0.4s ease both"}}>
+            {[["100%","PIN Protected"],["Free","To Get Started"],["<30s","To Share a File"],["∞","Access Anytime"]].map(([n,l],i,a)=>(
+              <div key={l} className="lp-stat" style={{textAlign:"center",padding:"0 36px",borderRight:i<a.length-1?"1px solid #1a2f50":"none"}}>
+                <span style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:800,color:"#e2eeff",display:"block"}}>{n}</span>
+                <span style={{fontSize:11,color:"#4a6a9a",fontFamily:"'DM Mono',monospace",letterSpacing:0.5,textTransform:"uppercase"}}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* WHAT IT'S FOR */}
+      <div id="what" style={{padding:"80px 24px",position:"relative"}}>
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px)",backgroundSize:"52px 52px"}}/>
+        <div style={{maxWidth:1080,margin:"0 auto",position:"relative",zIndex:1}}>
+          <div className="lp-reveal" style={{marginBottom:48}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#3b82f6",letterSpacing:2,textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{width:20,height:1,background:"#3b82f6",display:"inline-block"}}/>What it's for
+            </div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,4vw,48px)",fontWeight:800,letterSpacing:-1,color:"#e2eeff",marginBottom:14}}>For files you actually need —<br/>not everything you own</h2>
+            <p style={{fontSize:16,color:"#4a6a9a",maxWidth:520,lineHeight:1.75,fontWeight:300}}>FilePIN is not a backup drive. It's a smart, secure space for the files you genuinely need to access or share at a moment's notice.</p>
+          </div>
+          <div className="lp-reveal" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:14}}>
+            {[
+              {icon:"🎓",who:"Students",what:"Store certificates and study material. Share notes with classmates via one link.",tags:["Degree Certificate","Lecture Notes","Assignments"]},
+              {icon:"💼",who:"Professionals",what:"Send proposals to clients securely. No email attachments, no Drive permissions.",tags:["Project Reports","Proposals","Resume"]},
+              {icon:"📚",who:"Teachers",what:"Share lecture PDFs and course books with students — no WhatsApp file limits.",tags:["Lecture PDFs","Course Books","Question Papers"]},
+              {icon:"🧳",who:"Travelers",what:"Access your travel docs from any device, any country, anytime in a hurry.",tags:["Travel Insurance","Hotel Bookings","Visa Copy"]},
+              {icon:"🏢",who:"Small Businesses",what:"Share catalogues and brochures via a clean link. Update file, link stays same.",tags:["Catalogues","Price Lists","Brochures"]},
+              {icon:"🔬",who:"Researchers",what:"Distribute papers and datasets to peers with controlled PIN-protected access.",tags:["Research Papers","Datasets","Reports"]},
+            ].map(c=>(
+              <div key={c.who} className="lp-card" style={{background:"#0c1628",border:"1px solid #1a2f50",borderRadius:14,padding:22,transition:"all 0.3s",cursor:"default"}}>
+                <span style={{fontSize:26,marginBottom:12,display:"block"}}>{c.icon}</span>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:"#e2eeff",marginBottom:8}}>{c.who}</div>
+                <p style={{fontSize:13,color:"#4a6a9a",lineHeight:1.65,marginBottom:12}}>{c.what}</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {c.tags.map(t=><span key={t} style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.15)",color:"#60a5fa",fontSize:10,fontFamily:"'DM Mono',monospace",padding:"3px 8px",borderRadius:4}}>{t}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Warning notice */}
+          <div className="lp-reveal" style={{background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:14,padding:"24px 28px",display:"flex",gap:16,alignItems:"flex-start",marginTop:36}}>
+            <span style={{fontSize:24,flexShrink:0}}>⚠️</span>
+            <div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,color:"#f59e0b",marginBottom:6}}>Use FilePIN wisely</div>
+              <p style={{fontSize:13,color:"#4a6a9a",lineHeight:1.7}}>FilePIN is built for <strong style={{color:"#e2eeff"}}>important, purposeful files</strong> — not as a replacement for your cloud backup or photo library. Think of it as a <strong style={{color:"#e2eeff"}}>digital briefcase</strong>, not a storage warehouse. Store what you genuinely need. Share what actually matters.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* HOW IT WORKS */}
+      <div id="how" style={{background:"#0c1628",padding:"80px 24px"}}>
+        <div style={{maxWidth:1080,margin:"0 auto"}}>
+          <div className="lp-reveal" style={{textAlign:"center",marginBottom:56}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#3b82f6",letterSpacing:2,textTransform:"uppercase",marginBottom:12,justifyContent:"center",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{width:20,height:1,background:"#3b82f6",display:"inline-block"}}/>How it works
+            </div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,4vw,48px)",fontWeight:800,letterSpacing:-1,color:"#e2eeff"}}>Simple enough for anyone</h2>
+          </div>
+          <div className="lp-steps lp-reveal" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:0,position:"relative"}}>
+            <div style={{position:"absolute",top:32,left:"12%",right:"12%",height:1,background:"linear-gradient(90deg,transparent,#1a2f50,#1a2f50,transparent)"}}/>
+            {[["1","Sign Up Free","Create account, choose your username — it becomes your personal file address."],["2","Upload Your File","Drag any file — PDF, image, ZIP, doc. Stored securely in cloud instantly."],["3","Set a PIN","Choose 4–8 digits. Only people who know the PIN can access the file."],["4","Share or Access","Copy your link. Bookmark it. Open anywhere — enter PIN and download."]].map(([n,title,desc])=>(
+              <div key={n} style={{textAlign:"center",padding:"0 16px"}}>
+                <div style={{width:64,height:64,borderRadius:"50%",background:"#060b13",border:"1px solid #1a2f50",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:"#3b82f6",position:"relative",zIndex:1}}>{n}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"#e2eeff",marginBottom:8}}>{title}</div>
+                <p style={{fontSize:13,color:"#4a6a9a",lineHeight:1.65}}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* FEATURES */}
+      <div id="features" style={{padding:"80px 24px",position:"relative"}}>
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px)",backgroundSize:"52px 52px"}}/>
+        <div style={{maxWidth:1080,margin:"0 auto",position:"relative",zIndex:1}}>
+          <div className="lp-reveal" style={{marginBottom:40}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#3b82f6",letterSpacing:2,textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{width:20,height:1,background:"#3b82f6",display:"inline-block"}}/>Features
+            </div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,4vw,48px)",fontWeight:800,letterSpacing:-1,color:"#e2eeff"}}>Built lean. Built useful.</h2>
+          </div>
+          <div className="lp-reveal" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
+            {[
+              {icon:"🔐",bg:"rgba(59,130,246,0.1)",color:"#3b82f6",title:"PIN-Protected Access",desc:"Every file has its own PIN. No PIN, no access — even if someone has the exact link."},
+              {icon:"🌍",bg:"rgba(34,197,94,0.1)",color:"#22c55e",title:"Access from Anywhere",desc:"Pull your files up from any phone, laptop or device — any country, any time."},
+              {icon:"🔗",bg:"rgba(245,158,11,0.1)",color:"#f59e0b",title:"Permanent Links",desc:"Your link never expires unless you delete the file. Share once, use forever."},
+              {icon:"📁",bg:"rgba(139,92,246,0.1)",color:"#8b5cf6",title:"All File Types",desc:"PDFs, images, ZIP files, spreadsheets — FilePIN handles any format."},
+              {icon:"📊",bg:"rgba(239,68,68,0.1)",color:"#ef4444",title:"Download Tracking",desc:"See how many times each file has been downloaded. Always stay informed."},
+              {icon:"⚡",bg:"rgba(59,130,246,0.1)",color:"#60a5fa",title:"No App for Recipients",desc:"The person receiving your file needs no account, app or login. Just the link and PIN."},
+            ].map(f=>(
+              <div key={f.title} className="lp-card" style={{background:"#0c1628",border:"1px solid #1a2f50",borderRadius:14,padding:24,transition:"all 0.3s",position:"relative",overflow:"hidden"}}>
+                <div style={{width:44,height:44,borderRadius:11,background:f.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:16}}>{f.icon}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:"#e2eeff",marginBottom:8}}>{f.title}</div>
+                <p style={{fontSize:13,color:"#4a6a9a",lineHeight:1.7}}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* SECURITY */}
+      <div id="security" style={{background:"#0c1628",padding:"80px 24px"}}>
+        <div style={{maxWidth:1080,margin:"0 auto"}}>
+          <div className="lp-reveal" style={{marginBottom:48}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#3b82f6",letterSpacing:2,textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{width:20,height:1,background:"#3b82f6",display:"inline-block"}}/>Security
+            </div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,4vw,48px)",fontWeight:800,letterSpacing:-1,color:"#e2eeff"}}>Your files. Your PIN.<br/>Your control.</h2>
+          </div>
+          <div className="lp-sec-grid lp-reveal" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:48,alignItems:"center"}}>
+            <div style={{background:"#060b13",border:"1px solid #1a2f50",borderRadius:18,padding:32}}>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#4a6a9a",letterSpacing:1.5,textTransform:"uppercase",textAlign:"center",marginBottom:16}}>PIN Verification</div>
+              <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:24}}>
+                {[1,1,1,0].map((f,i)=><div key={i} style={{width:18,height:18,borderRadius:"50%",background:f?"#3b82f6":"transparent",border:f?"none":"2px solid #1a2f50",boxShadow:f?"0 0 12px rgba(59,130,246,0.5)":""}}/>)}
+              </div>
+              {["Files stored with enterprise-grade encryption","PINs are never stored in plain text","Download URLs expire after 60 seconds","No file preview without correct PIN","Each user's files are fully isolated","You can delete any file instantly"].map(r=>(
+                <div key={r} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#0c1628",borderRadius:8,marginBottom:7,fontSize:12,color:"#4a6a9a",fontFamily:"'DM Mono',monospace"}}>
+                  <span style={{color:"#22c55e"}}>✓</span>{r}
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:20}}>
+              {[
+                {icon:"🛡️",title:"PIN is the only key",desc:"Even with the exact URL, nobody can see or download your file without the correct PIN. The link alone is useless."},
+                {icon:"⏱️",title:"Self-destructing download links",desc:"When a PIN is verified, a signed URL is generated that expires in 60 seconds. It cannot be reused or forwarded."},
+                {icon:"☁️",title:"Enterprise cloud infrastructure",desc:"Files are stored on Supabase — trusted by thousands of businesses globally — with strict Row Level Security."},
+                {icon:"🔑",title:"You stay in control",desc:"Change your PIN anytime. Delete a file with one click. Track every download. Nothing happens without your action."},
+              ].map(p=>(
+                <div key={p.title} style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{p.icon}</div>
+                  <div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:"#e2eeff",marginBottom:4}}>{p.title}</div>
+                    <p style={{fontSize:13,color:"#4a6a9a",lineHeight:1.65}}>{p.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div style={{textAlign:"center",padding:"100px 24px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px)",backgroundSize:"52px 52px"}}/>
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:600,height:400,background:"radial-gradient(ellipse,rgba(59,130,246,0.15) 0%,transparent 70%)",pointerEvents:"none"}}/>
+        <div className="lp-reveal" style={{position:"relative",zIndex:1}}>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(36px,5vw,64px)",fontWeight:900,letterSpacing:-2,color:"#e2eeff",marginBottom:12,lineHeight:1.1}}>
+            One Link.<br/>One <span style={{color:"#3b82f6"}}>PIN.</span><br/>Any File. Anytime.
+          </h2>
+          <p style={{fontSize:16,color:"#4a6a9a",marginBottom:12,fontWeight:300}}>Your personal file space is waiting. Free to start, forever useful.</p>
+          <p style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:"rgba(59,130,246,0.5)",letterSpacing:2,textTransform:"uppercase",marginBottom:36}}>No credit card · No app · No complexity</p>
+          <div style={{display:"flex",justifyContent:"center",gap:12,flexWrap:"wrap"}}>
+            <button onClick={()=>navigate("/signup")} style={{background:"#3b82f6",color:"#fff",border:"none",padding:"15px 40px",borderRadius:12,fontSize:16,fontWeight:600,cursor:"pointer",boxShadow:"0 8px 28px rgba(59,130,246,0.3)",fontFamily:"'DM Sans',sans-serif"}}>
+              Create Free Account →
+            </button>
+            <button onClick={()=>navigate("/login")} style={{background:"transparent",color:"#4a6a9a",border:"1px solid #1a2f50",padding:"15px 40px",borderRadius:12,fontSize:16,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+              Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <div style={{background:"#0c1628",borderTop:"1px solid #1a2f50",padding:"32px 48px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:9}}>
+          <svg width="22" height="22" viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" fill="#3b82f6" opacity="0.15"/><rect x="2" y="2" width="24" height="24" rx="6" stroke="#3b82f6" strokeWidth="1.5"/><path d="M9 14.5L12.5 18L19 11" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:"#e2eeff"}}>File<span style={{color:"#3b82f6"}}>PIN</span></span>
+        </div>
+        <p style={{fontSize:12,color:"#4a6a9a",fontFamily:"'DM Mono',monospace"}}>© 2026 FilePIN · One Link. One PIN. Any File. Anytime.</p>
+        <div style={{display:"flex",gap:24}}>
+          {[["#what","What's it for"],["#security","Security"],["signup","Sign Up"],["login","Login"]].map(([h,l])=>(
+            <a key={l} href={h.startsWith("#")?h:undefined} onClick={h.startsWith("#")?undefined:()=>navigate("/"+h)}
+              style={{fontSize:12,color:"#4a6a9a",textDecoration:"none",fontFamily:"'DM Mono',monospace",cursor:"pointer",transition:"color 0.2s"}}
+              onMouseEnter={e=>e.target.style.color="#3b82f6"} onMouseLeave={e=>e.target.style.color="#4a6a9a"}>
+              {l}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <script dangerouslySetInnerHTML={{__html:`
+        const obs = new IntersectionObserver(entries => {
+          entries.forEach(e => { if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target);} });
+        },{threshold:0.08});
+        document.querySelectorAll('.lp-reveal').forEach(el=>obs.observe(el));
+      `}}/>
+    </div>
+  );
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
+function ProtectedRoute({ children, authUser, profile }) {
+  if (!authUser || !profile) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function PublicFilePage({ dark, onToggle }) {
+  const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const username = params.get("u");
+  const filename = params.get("f");
+  if (!username || !filename) return <Navigate to="/login" replace />;
+  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
+}
+
 export default function App() {
   const [dark, setDark]         = useState(true);
   const [authUser, setAuthUser] = useState(null);
@@ -653,7 +966,7 @@ export default function App() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setAuthUser(null); setProfile(null);
-    navigate("/login");
+    navigate("/");
   }
 
   if (loading) return (
@@ -664,12 +977,9 @@ export default function App() {
 
   return (
     <>
-      <style>{`
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{margin:0;}
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&display=swap');
-      `}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}body{margin:0;}`}</style>
       <Routes>
+        <Route path="/"          element={<LandingPage/>}/>
         <Route path="/login"     element={<LoginPage  onLogin={handleLogin} onGoSignup={()=>navigate("/signup")} onForgot={()=>navigate("/forgot")} dark={dark} onToggle={toggle}/>}/>
         <Route path="/signup"    element={<SignupPage onSignup={handleSignup} onGoLogin={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
         <Route path="/forgot"    element={<ForgotPage onBack={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
@@ -678,19 +988,9 @@ export default function App() {
             <Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/>
           </ProtectedRoute>
         }/>
-        <Route path="/file" element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
-        <Route path="*" element={<Navigate to="/login" replace />}/>
+        <Route path="/file"      element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
+        <Route path="*"          element={<Navigate to="/" replace/>}/>
       </Routes>
     </>
   );
-}
-
-// ── PUBLIC FILE PAGE WRAPPER (reads URL params) ───────────────────────────────
-function PublicFilePage({ dark, onToggle }) {
-  const navigate = useNavigate();
-  const params = new URLSearchParams(window.location.search);
-  const username = params.get("u");
-  const filename = params.get("f");
-  if (!username || !filename) return <Navigate to="/login" replace />;
-  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={toggle}/>;
 }
