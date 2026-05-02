@@ -1,13 +1,1358 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FilePIN — Secure File Sharing</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FilePIN — One Link. One PIN. Any File. Anytime.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #060b13;
+    --surface: #0c1628;
+    --surface2: #101e36;
+    --border: #1a2f50;
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --glow: rgba(59,130,246,0.15);
+    --glow2: rgba(59,130,246,0.05);
+    --text: #e2eeff;
+    --sub: #4a6a9a;
+    --muted: #1e3050;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* Noise */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  .grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--glow2) 1px, transparent 1px),
+      linear-gradient(90deg, var(--glow2) 1px, transparent 1px);
+    background-size: 52px 52px;
+    pointer-events: none;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 48px;
+    background: rgba(6,11,19,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--sub);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  .nav-cta { display: flex; align-items: center; gap: 12px; }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--sub);
+    padding: 9px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-primary {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px var(--glow);
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+
+  /* ── HERO ── */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 140px 24px 100px;
+    overflow: hidden;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 500px;
+    background: radial-gradient(ellipse, rgba(59,130,246,0.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 20px;
+    padding: 7px 18px;
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--accent2);
+    margin-bottom: 36px;
+    letter-spacing: 0.5px;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .badge-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: blink 2s infinite;
+  }
+
+  @keyframes blink {
+    0%,100% { opacity:1; }
+    50% { opacity:0.3; }
+  }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(52px, 8vw, 96px);
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -3px;
+    color: var(--text);
+    margin-bottom: 28px;
+    animation: fadeUp 0.5s 0.1s ease both;
+  }
+
+  .hero-title .accent { color: var(--accent); }
+  .hero-title .italic { font-style: italic; color: var(--accent2); }
+  .hero-title .outline {
+    -webkit-text-stroke: 1.5px rgba(59,130,246,0.6);
+    color: transparent;
+  }
+
+  .tagline-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+    animation: fadeUp 0.5s 0.15s ease both;
+  }
+
+  .tagline-word {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(13px, 2vw, 16px);
+    color: var(--sub);
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+  }
+
+  .tagline-word:not(:last-child)::after {
+    content: '·';
+    position: absolute;
+    right: -2px;
+    color: var(--accent);
+    font-size: 20px;
+  }
+
+  .tagline-word.active {
+    color: var(--accent);
+    border-color: rgba(59,130,246,0.3);
+    background: rgba(59,130,246,0.06);
+  }
+
+  .hero-sub {
+    font-size: 18px;
+    color: var(--sub);
+    max-width: 580px;
+    margin: 0 auto 48px;
+    line-height: 1.75;
+    font-weight: 300;
+    animation: fadeUp 0.5s 0.2s ease both;
+  }
+
+  .hero-sub strong { color: var(--text); font-weight: 500; }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 64px;
+    animation: fadeUp 0.5s 0.25s ease both;
+  }
+
+  .btn-hero {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 15px 36px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    box-shadow: 0 8px 32px rgba(59,130,246,0.3);
+    transition: all 0.25s;
+    font-family: 'DM Sans', sans-serif;
+    letter-spacing: 0.2px;
+  }
+
+  .btn-hero:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(59,130,246,0.4); }
+
+  .btn-hero-ghost {
+    background: transparent;
+    color: var(--sub);
+    border: 1px solid var(--border);
+    padding: 15px 36px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.25s;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .btn-hero-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* URL Demo Card */
+  .url-demo {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 32px;
+    animation: fadeUp 0.5s 0.3s ease both;
+    text-align: left;
+  }
+
+  .url-demo-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--sub);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .url-demo-link {
+    font-family: 'DM Mono', monospace;
+    font-size: 15px;
+    color: var(--sub);
+  }
+
+  .url-demo-link .u { color: var(--accent); }
+  .url-demo-link .f { color: var(--accent2); }
+
+  .url-demo-pin {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--sub);
+  }
+
+  .pin-dots-sm {
+    display: flex;
+    gap: 6px;
+  }
+
+  .pin-dot-sm {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .pin-dot-sm.e {
+    background: transparent;
+    border: 1.5px solid var(--border);
+  }
+
+  .url-demo-access {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--success);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── WHAT IT'S FOR ── */
+  .forwhom {
+    position: relative;
+    padding: 100px 24px;
+  }
+
+  .forwhom-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  .section-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-tag::before {
+    content: '';
+    width: 20px; height: 1px;
+    background: var(--accent);
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(32px, 4vw, 52px);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -1px;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  .section-sub {
+    font-size: 17px;
+    color: var(--sub);
+    max-width: 540px;
+    line-height: 1.75;
+    font-weight: 300;
+    margin-bottom: 56px;
+  }
+
+  /* Use case cards */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .usecase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .usecase-card:hover {
+    border-color: rgba(59,130,246,0.3);
+    transform: translateY(-3px);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+  }
+
+  .usecase-icon { font-size: 28px; margin-bottom: 14px; display: block; }
+
+  .usecase-who {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .usecase-what {
+    font-size: 13px;
+    color: var(--sub);
+    line-height: 1.65;
+    margin-bottom: 14px;
+  }
+
+  .usecase-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .file-tag {
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.15);
+    color: var(--accent2);
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    padding: 3px 9px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── NOTICE BANNER ── */
+  .notice {
+    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 16px;
+    padding: 28px 36px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    margin-top: 48px;
+  }
+
+  .notice-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+
+  .notice-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #f59e0b;
+    margin-bottom: 8px;
+  }
+
+  .notice-text {
+    font-size: 14px;
+    color: var(--sub);
+    line-height: 1.7;
+  }
+
+  .notice-text strong { color: var(--text); }
+
+  /* ── HOW IT WORKS ── */
+  .how-section {
+    background: var(--surface);
+    padding: 100px 24px;
+    position: relative;
+  }
+
+  .how-inner { max-width: 1080px; margin: 0 auto; }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    position: relative;
+    margin-top: 20px;
+  }
+
+  .steps::after {
+    content: '';
+    position: absolute;
+    top: 32px;
+    left: 12%;
+    right: 12%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), var(--border), transparent);
+  }
+
+  .step { text-align: center; padding: 0 20px; }
+
+  .step-num {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--accent);
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  .step-desc { font-size: 13px; color: var(--sub); line-height: 1.7; }
+
+  /* ── FEATURES ── */
+  .features-section { padding: 100px 24px; position: relative; }
+  .features-inner { max-width: 1080px; margin: 0 auto; }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 18px;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(59,130,246,0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  }
+
+  .feature-card:hover::after { opacity: 1; }
+
+  .feature-icon {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    margin-bottom: 18px;
+  }
+
+  .feature-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  .feature-desc { font-size: 13px; color: var(--sub); line-height: 1.7; }
+
+  /* ── SECURITY ── */
+  .security-section {
+    background: var(--surface);
+    padding: 100px 24px;
+    position: relative;
+  }
+
+  .security-inner { max-width: 1080px; margin: 0 auto; }
+
+  .security-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+
+  .security-visual {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .security-visual-glow {
+    position: absolute;
+    bottom: -40px; right: -40px;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%);
+  }
+
+  .sec-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--sub);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 18px;
+  }
+
+  .pin-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin-bottom: 28px;
+  }
+
+  .pd {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(59,130,246,0.5);
+    transition: all 0.3s;
+  }
+
+  .pd.empty {
+    background: transparent;
+    border: 2px solid var(--border);
+    box-shadow: none;
+  }
+
+  .sec-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    background: var(--surface);
+    border-radius: 9px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--sub);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .sec-row .ck { color: var(--success); }
+
+  .sec-points { display: flex; flex-direction: column; gap: 22px; }
+
+  .sec-point { display: flex; gap: 16px; align-items: flex-start; }
+
+  .sec-point-icon {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .sec-point-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 5px;
+  }
+
+  .sec-point-desc { font-size: 13px; color: var(--sub); line-height: 1.65; }
+
+  /* ── WHY ── */
+  .why-section { padding: 100px 24px; position: relative; }
+  .why-inner { max-width: 1080px; margin: 0 auto; }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 44px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .compare-table th {
+    background: var(--surface);
+    padding: 16px 24px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--sub);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .compare-table th.hl { color: var(--accent); background: rgba(59,130,246,0.08); }
+
+  .compare-table td {
+    padding: 14px 24px;
+    font-size: 14px;
+    color: var(--sub);
+    border-bottom: 1px solid var(--muted);
+  }
+
+  .compare-table td.hl { background: rgba(59,130,246,0.04); color: var(--text); font-weight: 500; }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .yes { color: var(--success); font-size: 17px; }
+  .no  { color: var(--danger);  font-size: 17px; }
+  .partial { color: var(--warning); font-size: 13px; }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center;
+    padding: 120px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-glow {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 700px; height: 400px;
+    background: radial-gradient(ellipse, rgba(59,130,246,0.16) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(38px, 5vw, 68px);
+    font-weight: 900;
+    letter-spacing: -2px;
+    color: var(--text);
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
+    line-height: 1.1;
+  }
+
+  .cta-title .accent { color: var(--accent); }
+
+  .cta-sub {
+    font-size: 17px;
+    color: var(--sub);
+    margin-bottom: 16px;
+    font-weight: 300;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-tagline {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: rgba(59,130,246,0.6);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 44px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cta-actions {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 40px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .footer-copy {
+    font-size: 12px;
+    color: var(--sub);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+
+  .footer-links a {
+    font-size: 12px;
+    color: var(--sub);
+    text-decoration: none;
+    font-family: 'DM Mono', monospace;
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover { color: var(--accent); }
+
+  /* ── REVEAL ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  .reveal-delay-1 { transition-delay: 0.1s; }
+  .reveal-delay-2 { transition-delay: 0.2s; }
+  .reveal-delay-3 { transition-delay: 0.3s; }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(22px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    nav { padding: 16px 20px; }
+    .nav-links { display: none; }
+    .steps { grid-template-columns: 1fr 1fr; }
+    .steps::after { display: none; }
+    .security-grid { grid-template-columns: 1fr; }
+    footer { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <rect x="2" y="2" width="24" height="24" rx="6" fill="#3b82f6" opacity="0.15"/>
+      <rect x="2" y="2" width="24" height="24" rx="6" stroke="#3b82f6" stroke-width="1.5"/>
+      <path d="M9 14.5L12.5 18L19 11" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="logo-text">File<span>PIN</span></span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#what">What's it for</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#security">Security</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="/login" class="btn-ghost">Sign In</a>
+    <a href="/signup" class="btn-primary">Get Started →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="grid-bg"></div>
+  <div class="hero-glow"></div>
+  <div style="position:relative;z-index:1;width:100%;">
+
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Secure · Instant · Always Accessible
+    </div>
+
+    <h1 class="hero-title">
+      Your important files.<br/>
+      <span class="outline">One</span> link.
+      <span class="accent">One</span> PIN.
+    </h1>
+
+    <div class="tagline-row">
+      <div class="tagline-word active">One Link</div>
+      <div class="tagline-word active">One PIN</div>
+      <div class="tagline-word active">Any File</div>
+      <div class="tagline-word active">Anytime</div>
+    </div>
+
+    <p class="hero-sub">
+      FilePIN is your <strong>personal file space</strong> for the things that matter —
+      certificates, reports, books, study material, work documents.
+      Upload once. Share or access anywhere with a simple link and PIN.
+      <strong>No app needed. No login for recipients.</strong>
+    </p>
+
+    <div class="hero-actions">
+      <a href="/signup" class="btn-hero">Create Your Space Free →</a>
+      <a href="#what" class="btn-hero-ghost">See what it's for</a>
+    </div>
+
+    <!-- URL Demo -->
+    <div class="url-demo">
+      <div class="url-demo-label">Your personal link looks like this</div>
+      <div class="url-demo-link">
+        filepin.io/<span class="u">yourname</span>/<span class="f">passport-scan.pdf</span>
+      </div>
+      <div class="url-demo-pin">
+        <span>PIN required:</span>
+        <div class="pin-dots-sm">
+          <div class="pin-dot-sm"></div>
+          <div class="pin-dot-sm"></div>
+          <div class="pin-dot-sm"></div>
+          <div class="pin-dot-sm e"></div>
+        </div>
+        <span>→ enter 4 digits to unlock</span>
+      </div>
+      <div class="url-demo-access">
+        <span>✓</span>
+        <span>Access granted — file ready anywhere in the world</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- WHAT IS IT FOR -->
+<section id="what" class="forwhom">
+  <div class="grid-bg"></div>
+  <div class="forwhom-inner">
+    <div class="reveal">
+      <div class="section-tag">What it's for</div>
+      <h2 class="section-title">For files you actually need —<br/>not everything you own</h2>
+      <p class="section-sub">
+        FilePIN is not a backup drive. It's not cloud storage for your entire phone.
+        It's a smart, secure space for the files you genuinely need to access or share at a moment's notice.
+      </p>
+    </div>
+
+    <div class="usecase-grid reveal reveal-delay-1">
+      <div class="usecase-card">
+        <span class="usecase-icon">🎓</span>
+        <div class="usecase-who">Students</div>
+        <p class="usecase-what">Store your certificates, transcripts and study material. Share notes and assignments with classmates via a single link.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Degree Certificate</span>
+          <span class="file-tag">Lecture Notes</span>
+          <span class="file-tag">Study Material</span>
+          <span class="file-tag">Assignments</span>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">💼</span>
+        <div class="usecase-who">Professionals</div>
+        <p class="usecase-what">Send proposals and reports to clients with a secure PIN-protected link. No email attachments, no Drive permissions.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Project Reports</span>
+          <span class="file-tag">Proposals</span>
+          <span class="file-tag">Invoices</span>
+          <span class="file-tag">Resume</span>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">📚</span>
+        <div class="usecase-who">Teachers & Educators</div>
+        <p class="usecase-what">Share lecture PDFs, reading material and course books with students using one simple link — no WhatsApp file limits.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Lecture PDFs</span>
+          <span class="file-tag">Course Books</span>
+          <span class="file-tag">Question Papers</span>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🧳</span>
+        <div class="usecase-who">Frequent Travelers</div>
+        <p class="usecase-what">Need your travel documents in a hurry? Access your visa, tickets and insurance from any device, any country, anytime.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Travel Insurance</span>
+          <span class="file-tag">Hotel Bookings</span>
+          <span class="file-tag">Visa Copy</span>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🏢</span>
+        <div class="usecase-who">Small Businesses</div>
+        <p class="usecase-what">Share catalogues, price lists and brochures with clients via a clean branded link. Update the file, the link stays the same.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Catalogues</span>
+          <span class="file-tag">Price Lists</span>
+          <span class="file-tag">Brochures</span>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🔬</span>
+        <div class="usecase-who">Researchers</div>
+        <p class="usecase-what">Distribute research papers, datasets and reports to peers and reviewers with controlled PIN-protected access.</p>
+        <div class="usecase-files">
+          <span class="file-tag">Research Papers</span>
+          <span class="file-tag">Datasets</span>
+          <span class="file-tag">Reports</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notice Banner -->
+    <div class="notice reveal reveal-delay-2">
+      <div class="notice-icon">⚠️</div>
+      <div>
+        <div class="notice-title">Use FilePIN wisely</div>
+        <p class="notice-text">
+          FilePIN is built for <strong>important, purposeful files</strong> — not as a replacement for your cloud backup or photo library.
+          Think of it as a <strong>digital briefcase</strong>, not a storage warehouse.
+          Store what you genuinely need. Share what actually matters.
+          The simpler your space, the more useful it becomes.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="how-section">
+  <div class="how-inner">
+    <div class="reveal" style="text-align:center;margin-bottom:64px;">
+      <div class="section-tag" style="justify-content:center;">How it works</div>
+      <h2 class="section-title">Simple enough for anyone</h2>
+      <p class="section-sub" style="margin:0 auto;">Four steps. Under a minute. No technical knowledge required.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-title">Sign Up Free</div>
+        <p class="step-desc">Create an account and choose your username. It becomes your personal file address on FilePIN.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-title">Upload Your File</div>
+        <p class="step-desc">Drag and drop any file — PDF, image, ZIP, document. It's stored securely in the cloud instantly.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-title">Set a PIN</div>
+        <p class="step-desc">Choose a 4 to 8 digit PIN that protects the file. Only people who know the PIN can access it.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-title">Share or Access</div>
+        <p class="step-desc">Copy your unique link. Share it or bookmark it. Open it anywhere — enter the PIN and download instantly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="features-section">
+  <div class="grid-bg"></div>
+  <div class="features-inner">
+    <div class="reveal">
+      <div class="section-tag">Features</div>
+      <h2 class="section-title">Built lean. Built useful.</h2>
+      <p class="section-sub">No bloat. Every feature exists because it makes your files more accessible and more secure.</p>
+    </div>
+    <div class="features-grid reveal reveal-delay-1">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(59,130,246,0.1);color:#3b82f6;">🔐</div>
+        <div class="feature-title">PIN-Protected Access</div>
+        <p class="feature-desc">Every file has its own PIN. No PIN, no access — even if someone has the exact link. You control who gets in.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(34,197,94,0.1);color:#22c55e;">🌍</div>
+        <div class="feature-title">Access from Anywhere</div>
+        <p class="feature-desc">Your files live in the cloud. Pull them up from your phone, a friend's laptop, a cyber café — any device, any country.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b;">🔗</div>
+        <div class="feature-title">Permanent Links</div>
+        <p class="feature-desc">Your link never expires unless you delete the file. Share it once, use it forever. No re-uploading, no broken links.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(139,92,246,0.1);color:#8b5cf6;">📁</div>
+        <div class="feature-title">All File Types</div>
+        <p class="feature-desc">PDFs, images, ZIP files, spreadsheets, Word docs — FilePIN handles any format without fuss.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">📊</div>
+        <div class="feature-title">Download Tracking</div>
+        <p class="feature-desc">See how many times each file has been downloaded. Know when your content is being accessed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(59,130,246,0.1);color:#60a5fa;">⚡</div>
+        <div class="feature-title">No App for Recipients</div>
+        <p class="feature-desc">The person receiving your file doesn't need an account, app, or login. Just the link and the PIN. That's it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security" class="security-section">
+  <div class="security-inner">
+    <div class="reveal">
+      <div class="section-tag">Security</div>
+      <h2 class="section-title">Your files. Your PIN.<br/>Your control.</h2>
+      <p class="section-sub">We don't take security lightly. Here's exactly how your files are protected.</p>
+    </div>
+    <div class="security-grid reveal reveal-delay-1">
+      <div class="security-visual">
+        <div class="security-visual-glow"></div>
+        <div class="sec-label">PIN verification in action</div>
+        <div class="pin-row">
+          <div class="pd" id="pd1"></div>
+          <div class="pd" id="pd2"></div>
+          <div class="pd" id="pd3"></div>
+          <div class="pd empty" id="pd4"></div>
+        </div>
+        <div class="sec-label" style="margin-bottom:24px;">Enter correct PIN → File unlocked</div>
+        <div class="sec-row"><span class="ck">✓</span> Files stored with enterprise-grade encryption</div>
+        <div class="sec-row"><span class="ck">✓</span> PINs are never stored in plain text</div>
+        <div class="sec-row"><span class="ck">✓</span> Download URLs expire after 60 seconds</div>
+        <div class="sec-row"><span class="ck">✓</span> No file preview without correct PIN</div>
+        <div class="sec-row"><span class="ck">✓</span> Each user's files are fully isolated</div>
+        <div class="sec-row"><span class="ck">✓</span> You can delete any file instantly</div>
+      </div>
+      <div class="sec-points">
+        <div class="sec-point">
+          <div class="sec-point-icon">🛡️</div>
+          <div>
+            <div class="sec-point-title">PIN is the only key</div>
+            <p class="sec-point-desc">Even if someone has your exact file URL, they cannot see, preview or download your file without the correct PIN. The link alone is useless.</p>
+          </div>
+        </div>
+        <div class="sec-point">
+          <div class="sec-point-icon">⏱️</div>
+          <div>
+            <div class="sec-point-title">Self-destructing download links</div>
+            <p class="sec-point-desc">When a PIN is verified, a secure signed URL is generated that expires in 60 seconds. Nobody can reuse or forward it after that window.</p>
+          </div>
+        </div>
+        <div class="sec-point">
+          <div class="sec-point-icon">☁️</div>
+          <div>
+            <div class="sec-point-title">Enterprise cloud infrastructure</div>
+            <p class="sec-point-desc">Files are stored on Supabase — the same infrastructure trusted by thousands of businesses globally — with strict Row Level Security policies.</p>
+          </div>
+        </div>
+        <div class="sec-point">
+          <div class="sec-point-icon">🔑</div>
+          <div>
+            <div class="sec-point-title">You stay in control</div>
+            <p class="sec-point-desc">Change your PIN anytime. Delete a file with one click. Track every download. Nothing happens to your files without your action.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY FILEPIN -->
+<section id="why" class="why-section">
+  <div class="grid-bg"></div>
+  <div class="why-inner">
+    <div class="reveal">
+      <div class="section-tag">Why FilePIN</div>
+      <h2 class="section-title">The gap nobody filled</h2>
+      <p class="section-sub">
+        Google Drive requires logins. WhatsApp has file limits and compression. Email is clunky for large files. WeTransfer links expire.
+        FilePIN fills the gap — permanent, PIN-protected, no friction.
+      </p>
+    </div>
+    <table class="compare-table reveal reveal-delay-1">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th class="hl">FilePIN ⬡</th>
+          <th>Google Drive</th>
+          <th>WeTransfer</th>
+          <th>WhatsApp</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>PIN-protected access</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">✗</span></td>
+        </tr>
+        <tr>
+          <td>No login for recipients</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="partial">Sometimes</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+        <tr>
+          <td>Permanent links</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">✗</span></td>
+        </tr>
+        <tr>
+          <td>No file compression</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+        </tr>
+        <tr>
+          <td>Personal file domain</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">✗</span></td>
+          <td><span class="no">✗</span></td>
+        </tr>
+        <tr>
+          <td>Download tracking</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="partial">Limited</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="no">✗</span></td>
+        </tr>
+        <tr>
+          <td>Free to use</td>
+          <td class="hl"><span class="yes">✓</span></td>
+          <td><span class="yes">✓</span></td>
+          <td><span class="partial">Limited</span></td>
+          <td><span class="yes">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="grid-bg"></div>
+  <div class="cta-glow"></div>
+  <h2 class="cta-title">
+    One Link.<br/>
+    One <span class="accent">PIN.</span><br/>
+    Any File. Anytime.
+  </h2>
+  <p class="cta-sub">Your personal file space is waiting. Free to start, forever useful.</p>
+  <div class="cta-tagline">No credit card · No app · No complexity</div>
+  <div class="cta-actions">
+    <a href="/signup" class="btn-hero" style="padding:16px 42px;font-size:16px;border-radius:12px;">Create Your Space Free →</a>
+    <a href="/login" class="btn-hero-ghost" style="padding:16px 42px;font-size:16px;border-radius:12px;">Sign In</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="nav-logo">
+    <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
+      <rect x="2" y="2" width="24" height="24" rx="6" fill="#3b82f6" opacity="0.15"/>
+      <rect x="2" y="2" width="24" height="24" rx="6" stroke="#3b82f6" stroke-width="1.5"/>
+      <path d="M9 14.5L12.5 18L19 11" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="logo-text" style="font-size:18px;">File<span>PIN</span></span>
+  </div>
+  <p class="footer-copy">© 2026 FilePIN · One Link. One PIN. Any File. Anytime.</p>
+  <ul class="footer-links">
+    <li><a href="#what">What's it for</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="/signup">Sign Up</a></li>
+    <li><a href="/login">Login</a></li>
+  </ul>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Animate PIN dots in security section
+  const pds = ['pd1','pd2','pd3','pd4'];
+  let step = 0;
+  setInterval(() => {
+    pds.forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (step < 4) {
+        // filling
+        if (i <= step) {
+          el.classList.remove('empty');
+          el.style.opacity = '1';
+        } else {
+          el.classList.add('empty');
+        }
+      } else {
+        // all filled = granted flash
+        el.classList.remove('empty');
+        el.style.background = i < step - 3 ? '#22c55e' : '#3b82f6';
+      }
+    });
+    step = (step + 1) % 8;
+  }, 600);
+
+  // Tagline word cycle highlight
+  const words = document.querySelectorAll('.tagline-word');
+  let wi = 0;
+  setInterval(() => {
+    words.forEach((w, i) => w.classList.toggle('active', i === wi));
+    wi = (wi + 1) % words.length;
+  }, 1200);
+</script>
+</body>
 </html>
