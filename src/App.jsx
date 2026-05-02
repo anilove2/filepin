@@ -916,20 +916,6 @@ function LandingPage() {
   );
 }
 
-// ── ROOT ──────────────────────────────────────────────────────────────────────
-function ProtectedRoute({ children, authUser, profile }) {
-  if (!authUser || !profile) return <Navigate to="/login" replace />;
-  return children;
-}
-
-function PublicFilePage({ dark, onToggle }) {
-  const navigate = useNavigate();
-  const params = new URLSearchParams(window.location.search);
-  const username = params.get("u");
-  const filename = params.get("f");
-  if (!username || !filename) return <Navigate to="/login" replace />;
-  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
-}
 
 export default function App() {
   const [dark, setDark]         = useState(true);
