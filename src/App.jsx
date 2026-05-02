@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
-const SUPABASE_URL  = "https://ylkskjjzkyydeqgvyuop.supabase.co"; // ← replace with your new URL
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa3Nramp6a3l5ZGVxZ3Z5dW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2Mzk3MTcsImV4cCI6MjA5MzIxNTcxN30.eC1gnIASNR-40RBUB3B567-EnhaIfkECcKGMzRTjGVU"; // ← replace with your new anon key
+const SUPABASE_URL  = "https://ylkskjjzkyydeqgvyuop.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa3Nramp6a3l5ZGVxZ3Z5dW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2Mzk3MTcsImV4cCI6MjA5MzIxNTcxN30.eC1gnIASNR-40RBUB3B567-EnhaIfkECcKGMzRTjGVU";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── THEME ─────────────────────────────────────────────────────────────────────
@@ -124,13 +125,14 @@ function LoginPage({ onLogin, onGoSignup, onForgot, dark, onToggle }) {
 
   async function login() {
     setErr(""); setLoading(true);
-    // Look up real email from profiles table
+    // username → look up email from profiles
     const { data: profile, error: pe } = await supabase
-      .from("profiles").select("id, email").eq("username", user.toLowerCase()).single();
+      .from("profiles").select("id").eq("username", user.toLowerCase()).single();
     if (pe || !profile) { setErr("Username not found."); setLoading(false); return; }
 
-    // Sign in with the real email stored in profiles
-    const { data, error } = await supabase.auth.signInWithPassword({ email: profile.email, password: pass });
+    // get email from auth — we stored it at signup as email = username@filepin.io
+    const email = `${user.toLowerCase()}@filepin.internal`;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) { setErr("Incorrect password."); setLoading(false); return; }
     onLogin(data.user);
     setLoading(false);
@@ -189,7 +191,7 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     if (existing) { setErr("Username already taken. Choose another."); setLoading(false); return; }
 
     // Sign up — use internal email pattern
-    const internalEmail = form.email;
+    const internalEmail = `${form.username.toLowerCase()}@filepin.internal`;
     const { data, error } = await supabase.auth.signUp({
       email: internalEmail,
       password: form.password,
@@ -197,12 +199,11 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     });
     if (error) { setErr(error.message); setLoading(false); return; }
 
-    // Insert profile (store real email for login lookup)
+    // Insert profile
     await supabase.from("profiles").insert({
       id: data.user.id,
       username: form.username.toLowerCase(),
       display_name: form.name,
-      email: form.email,
     });
 
     setLoading(false); setDone(true);
@@ -606,26 +607,25 @@ function PublicPage({ username, filename, onBack, dark, onToggle }) {
   );
 }
 
+// ── AUTH CONTEXT ─────────────────────────────────────────────────────────────
+function ProtectedRoute({ children, authUser, profile }) {
+  if (!authUser || !profile) return <Navigate to="/login" replace />;
+  return children;
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [dark, setDark]       = useState(true);
-  const [view, setView]       = useState("loading");
+  const [dark, setDark]         = useState(true);
   const [authUser, setAuthUser] = useState(null);
   const [profile, setProfile]   = useState(null);
-  const [publicParams, setPublicParams] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const navigate = useNavigate();
   const toggle = () => setDark(d => !d);
 
-  // Check for public URL params
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const u = params.get("u");
-    const f = params.get("f");
-    if (u && f) { setPublicParams({ username: u, filename: f }); setView("public"); return; }
-
-    // Check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) loadProfile(session.user);
-      else setView("login");
+      else setLoading(false);
     });
   }, []);
 
@@ -634,27 +634,33 @@ export default function App() {
     if (data) {
       setAuthUser(user);
       setProfile({ username: data.username, displayName: data.display_name });
-      setView("dashboard");
-    } else {
-      setView("login");
     }
+    setLoading(false);
   }
 
   async function handleLogin(user) {
     await loadProfile(user);
+    navigate("/dashboard");
   }
 
   async function handleSignup(user, prof) {
     setAuthUser(user);
     setProfile(prof);
-    setView("dashboard");
+    setLoading(false);
+    navigate("/dashboard");
   }
 
   async function handleLogout() {
     await supabase.auth.signOut();
     setAuthUser(null); setProfile(null);
-    setView("login");
+    navigate("/login");
   }
+
+  if (loading) return (
+    <div style={{minHeight:"100vh",background:"#070c14",display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6090",fontFamily:"monospace"}}>
+      Loading…
+    </div>
+  );
 
   return (
     <>
@@ -663,12 +669,28 @@ export default function App() {
         body{margin:0;}
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&display=swap');
       `}</style>
-      {view==="loading"   && <div style={{minHeight:"100vh",background:"#070c14",display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6090",fontFamily:"monospace"}}>Loading…</div>}
-      {view==="login"     && <LoginPage onLogin={handleLogin} onGoSignup={()=>setView("signup")} onForgot={()=>setView("forgot")} dark={dark} onToggle={toggle}/>}
-      {view==="signup"    && <SignupPage onSignup={handleSignup} onGoLogin={()=>setView("login")} dark={dark} onToggle={toggle}/>}
-      {view==="forgot"    && <ForgotPage onBack={()=>setView("login")} dark={dark} onToggle={toggle}/>}
-      {view==="dashboard" && authUser && profile && <Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/>}
-      {view==="public"    && publicParams && <PublicPage username={publicParams.username} filename={publicParams.filename} onBack={()=>setView("login")} dark={dark} onToggle={toggle}/>}
+      <Routes>
+        <Route path="/login"     element={<LoginPage  onLogin={handleLogin} onGoSignup={()=>navigate("/signup")} onForgot={()=>navigate("/forgot")} dark={dark} onToggle={toggle}/>}/>
+        <Route path="/signup"    element={<SignupPage onSignup={handleSignup} onGoLogin={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
+        <Route path="/forgot"    element={<ForgotPage onBack={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
+        <Route path="/dashboard" element={
+          <ProtectedRoute authUser={authUser} profile={profile}>
+            <Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/>
+          </ProtectedRoute>
+        }/>
+        <Route path="/file" element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
+        <Route path="*" element={<Navigate to="/login" replace />}/>
+      </Routes>
     </>
   );
+}
+
+// ── PUBLIC FILE PAGE WRAPPER (reads URL params) ───────────────────────────────
+function PublicFilePage({ dark, onToggle }) {
+  const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const username = params.get("u");
+  const filename = params.get("f");
+  if (!username || !filename) return <Navigate to="/login" replace />;
+  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={toggle}/>;
 }
