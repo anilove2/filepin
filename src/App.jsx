@@ -623,6 +623,15 @@ function PublicFilePage({ dark, onToggle }) {
 function LandingPage() {
   const navigate = useNavigate();
   const t = T.dark;
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target);} });
+    }, {threshold:0.08});
+    document.querySelectorAll('.lp-reveal').forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <div style={{minHeight:"100vh",background:"#060b13",color:"#e2eeff",fontFamily:"'DM Sans',sans-serif",overflowX:"hidden"}}>
       <style>{`
@@ -902,12 +911,7 @@ function LandingPage() {
         </div>
       </div>
 
-      <script dangerouslySetInnerHTML={{__html:`
-        const obs = new IntersectionObserver(entries => {
-          entries.forEach(e => { if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target);} });
-        },{threshold:0.08});
-        document.querySelectorAll('.lp-reveal').forEach(el=>obs.observe(el));
-      `}}/>
+
     </div>
   );
 }
