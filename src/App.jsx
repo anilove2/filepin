@@ -194,7 +194,6 @@ function SignupPage({ onSignup, onGoLogin, dark, onToggle }) {
     });
     if (error) { setErr(error.message); setLoading(false); return; }
 
-    // Insert profile with email for login lookup
     await supabase.from("profiles").insert({
       id: data.user.id,
       username: form.username.toLowerCase(),
@@ -316,13 +315,51 @@ function ForgotPage({ onBack, dark, onToggle }) {
   );
 }
 
+// ── EXPIRY HELPERS ────────────────────────────────────────────────────────────
+const EXPIRY_OPTIONS = [
+  { label:"1 Download", value:"1_download", icon:"1️⃣",  desc:"Auto-deleted after first download" },
+  { label:"24 Hours",   value:"24h",        icon:"⏰",  desc:"Deleted after 24 hours" },
+  { label:"7 Days",     value:"7d",         icon:"📅",  desc:"Deleted after 7 days" },
+  { label:"30 Days",    value:"30d",        icon:"🗓️",  desc:"Deleted after 30 days" },
+  { label:"No Expiry",  value:"none",       icon:"♾️",  desc:"Available forever" },
+];
+
+function getExpiresAt(value) {
+  const now = new Date();
+  if (value === "24h")  return new Date(now.getTime() +    24*3600*1000).toISOString();
+  if (value === "7d")   return new Date(now.getTime() +  7*24*3600*1000).toISOString();
+  if (value === "30d")  return new Date(now.getTime() + 30*24*3600*1000).toISOString();
+  return null;
+}
+
+function isExpired(f) {
+  if (!f) return false;
+  if (f.expiry_type === "1_download" && f.downloads >= 1) return true;
+  if (f.expires_at && new Date(f.expires_at) < new Date()) return true;
+  return false;
+}
+
+function expiryBadge(f) {
+  if (f.expiry_type === "1_download" && f.downloads >= 1) return { label:"Expired",   color:"#ef4444" };
+  if (f.expires_at && new Date(f.expires_at) < new Date()) return { label:"Expired",   color:"#ef4444" };
+  if (f.expiry_type === "1_download") return { label:"1 download",  color:"#f59e0b" };
+  if (!f.expires_at)                  return { label:"No expiry",   color:"#22c55e" };
+  const diff = new Date(f.expires_at) - new Date();
+  const days = Math.floor(diff / 86400000);
+  const hrs  = Math.floor(diff / 3600000);
+  if (days >= 1) return { label:`${days}d left`, color:"#3b82f6" };
+  if (hrs  >= 1) return { label:`${hrs}h left`,  color:"#f59e0b" };
+  return { label:"Expiring soon", color:"#ef4444" };
+}
+
 // ── UPLOAD MODAL ──────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onUpload, t, userId, username }) {
-  const [pin, setPin]   = useState("");
-  const [file, setFile] = useState(null);
-  const [drag, setDrag] = useState(false);
+  const [pin, setPin]       = useState("");
+  const [file, setFile]     = useState(null);
+  const [drag, setDrag]     = useState(false);
   const [loading, setLoading] = useState(false);
-  const [err, setErr]   = useState("");
+  const [err, setErr]       = useState("");
+  const [expiry, setExpiry] = useState("none");
   const ref = useRef();
 
   async function doUpload() {
@@ -331,16 +368,15 @@ function UploadModal({ onClose, onUpload, t, userId, username }) {
     const ext  = file.name.split(".").pop().toLowerCase();
     const type = getFileType(ext);
     const path = `${userId}/${Date.now()}_${file.name}`;
-
     const { error: upErr } = await supabase.storage.from("files").upload(path, file);
     if (upErr) { setErr("Upload failed: " + upErr.message); setLoading(false); return; }
-
     const sizeLabel = file.size > 1048576 ? (file.size/1048576).toFixed(1)+" MB" : Math.round(file.size/1024)+" KB";
     const { data, error: dbErr } = await supabase.from("files").insert({
-      user_id: userId, username, name: file.name,
-      storage_path: path, size: sizeLabel, type, pin, downloads: 0,
+      user_id: userId, username, name: file.name, storage_path: path,
+      size: sizeLabel, type, pin, downloads: 0,
+      expiry_type: expiry,
+      expires_at:  getExpiresAt(expiry),
     }).select().single();
-
     if (dbErr) { setErr("DB error: " + dbErr.message); setLoading(false); return; }
     onUpload(data);
     setLoading(false);
@@ -348,23 +384,48 @@ function UploadModal({ onClose, onUpload, t, userId, username }) {
   }
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, backdropFilter:"blur(4px)" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:"36px 32px", width:"100%", maxWidth:420, boxShadow:t.shadow }}>
-        <h3 style={{ color:t.text, fontSize:20, fontWeight:700, margin:"0 0 24px", fontFamily:"'Playfair Display',Georgia,serif" }}>Upload File</h3>
-        <div onClick={()=>ref.current.click()} onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);setFile(e.dataTransfer.files[0]);}}
-          style={{ border:`2px dashed ${drag?t.accent:t.border}`, borderRadius:12, padding:"36px 20px", textAlign:"center", cursor:"pointer", marginBottom:22, color:t.textSub, fontSize:14, fontFamily:"monospace", background:drag?t.accentSoft:t.surfaceAlt, transition:"all 0.2s" }}>
+    <div onClick={onClose} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,backdropFilter:"blur(4px)" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:t.surface,border:`1px solid ${t.border}`,borderRadius:20,padding:"32px 28px",width:"100%",maxWidth:440,boxShadow:t.shadow,maxHeight:"92vh",overflowY:"auto" }}>
+        <h3 style={{ color:t.text,fontSize:20,fontWeight:700,margin:"0 0 22px",fontFamily:"'Playfair Display',Georgia,serif" }}>Upload File</h3>
+
+        {/* Drop zone */}
+        <div onClick={()=>ref.current.click()}
+          onDragOver={e=>{e.preventDefault();setDrag(true);}}
+          onDragLeave={()=>setDrag(false)}
+          onDrop={e=>{e.preventDefault();setDrag(false);setFile(e.dataTransfer.files[0]);}}
+          style={{ border:`2px dashed ${drag?t.accent:t.border}`,borderRadius:12,padding:"26px 20px",textAlign:"center",cursor:"pointer",marginBottom:20,color:t.textSub,fontSize:14,fontFamily:"monospace",background:drag?t.accentSoft:t.surfaceAlt,transition:"all 0.2s" }}>
           <input ref={ref} type="file" style={{display:"none"}} onChange={e=>setFile(e.target.files[0])}/>
-          {file?<><div style={{fontSize:28,color:t.success}}>✓</div>{file.name}</>:<><div style={{fontSize:28,marginBottom:8}}>↑</div>Drop file here or click</>}
+          {file ? <><div style={{fontSize:26,color:t.success}}>✓</div>{file.name}</> : <><div style={{fontSize:26,marginBottom:6}}>↑</div>Drop file here or click to browse</>}
         </div>
-        <label style={{ display:"block", fontSize:11, color:t.textSub, letterSpacing:1.2, textTransform:"uppercase", marginBottom:7, fontFamily:"monospace" }}>Access PIN (4–8 digits)</label>
-        <input style={{ width:"100%", background:t.inputBg, border:`1.5px solid ${t.border}`, borderRadius:10, color:t.text, fontSize:15, padding:"12px 14px", outline:"none", boxSizing:"border-box", fontFamily:"monospace", marginBottom:8 }}
-          placeholder="e.g. 1234" maxLength={8} value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,""))}/>
-        <p style={{ color:t.textSub, fontSize:12, fontFamily:"monospace", marginBottom:16 }}>Anyone with your link needs this PIN to access the file.</p>
+
+        {/* PIN */}
+        <label style={{ display:"block",fontSize:11,color:t.textSub,letterSpacing:1.2,textTransform:"uppercase",marginBottom:6,fontFamily:"monospace" }}>Access PIN (4–8 digits)</label>
+        <input
+          style={{ width:"100%",background:t.inputBg,border:`1.5px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:15,padding:"11px 14px",outline:"none",boxSizing:"border-box",fontFamily:"monospace",marginBottom:6 }}
+          placeholder="e.g. 1234" maxLength={8} value={pin} onChange={e=>setPin(e.target.value.replace(/[^0-9]/g,""))}/>
+        <p style={{ color:t.textSub,fontSize:11,fontFamily:"monospace",marginBottom:20 }}>Recipients need this PIN to access the file.</p>
+
+        {/* Expiry */}
+        <label style={{ display:"block",fontSize:11,color:t.textSub,letterSpacing:1.2,textTransform:"uppercase",marginBottom:10,fontFamily:"monospace" }}>File Availability</label>
+        <div style={{ display:"flex",flexDirection:"column",gap:7,marginBottom:20 }}>
+          {EXPIRY_OPTIONS.map(opt=>(
+            <div key={opt.value} onClick={()=>setExpiry(opt.value)}
+              style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",borderRadius:10,border:`1.5px solid ${expiry===opt.value?t.accent:t.border}`,background:expiry===opt.value?t.accentSoft:t.surfaceAlt,cursor:"pointer",transition:"all 0.15s" }}>
+              <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                <div style={{ width:16,height:16,borderRadius:"50%",border:`2px solid ${expiry===opt.value?t.accent:t.textMuted}`,background:expiry===opt.value?t.accent:"transparent",flexShrink:0,transition:"all 0.15s" }}/>
+                <span style={{ fontSize:15 }}>{opt.icon}</span>
+                <span style={{ color:expiry===opt.value?t.text:t.textSub,fontSize:14,fontWeight:expiry===opt.value?600:400 }}>{opt.label}</span>
+              </div>
+              <span style={{ color:t.textMuted,fontSize:11,fontFamily:"monospace" }}>{opt.desc}</span>
+            </div>
+          ))}
+        </div>
+
         <ErrBox msg={err} t={t}/>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{ flex:1, background:"transparent", border:`1px solid ${t.border}`, color:t.textSub, borderRadius:10, padding:12, fontSize:14, cursor:"pointer" }}>Cancel</button>
+          <button onClick={onClose} style={{ flex:1,background:"transparent",border:`1px solid ${t.border}`,color:t.textSub,borderRadius:10,padding:12,fontSize:14,cursor:"pointer" }}>Cancel</button>
           <button onClick={doUpload} disabled={loading||!file||pin.length<4}
-            style={{ flex:2, background:(!file||pin.length<4||loading)?t.textMuted:t.accent, color:"#fff", border:"none", borderRadius:10, padding:12, fontSize:14, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
+            style={{ flex:2,background:(!file||pin.length<4||loading)?t.textMuted:t.accent,color:"#fff",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,cursor:"pointer",transition:"background 0.2s" }}>
             {loading?"Uploading…":"Upload →"}
           </button>
         </div>
@@ -417,7 +478,7 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
     <div style={{ minHeight:"100vh", background:t.bg, fontFamily:"'Playfair Display',Georgia,serif", transition:"background 0.3s" }}>
       {showUpload && <UploadModal onClose={()=>setShowUpload(false)} onUpload={f=>setFiles(p=>[f,...p])} t={t} userId={authUser.id} username={profile.username}/>}
 
-      <nav style={{ position:"sticky", top:0, zIndex:100, background:t.navBg, backdropFilter:"blur(12px)", borderBottom:`1px solid ${t.border}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"nowrap" }}>
+      <nav style={{ position:"sticky",top:0,zIndex:100,background:t.navBg,backdropFilter:"blur(12px)",borderBottom:`1px solid ${t.border}`,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8 }}>
         <Logo t={t} size={18}/>
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <ThemeToggle dark={dark} onToggle={onToggle} t={t}/>
@@ -472,25 +533,32 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
                   <button onClick={()=>setDelConfirm(f.id)} style={{background:"none",border:"none",color:t.textMuted,fontSize:16,cursor:"pointer",lineHeight:1}}>✕</button>
                 </div>
                 <p style={{color:t.text,fontSize:15,fontWeight:700,margin:"0 0 4px",wordBreak:"break-all"}}>{f.name}</p>
-                <p style={{color:t.textSub,fontSize:12,fontFamily:"monospace",margin:"0 0 14px"}}>{f.size} · {formatDate(f.created_at)} · {f.downloads} dl</p>
+                <p style={{color:t.textSub,fontSize:12,fontFamily:"monospace",margin:"0 0 8px"}}>{f.size} · {formatDate(f.created_at)} · {f.downloads} dl</p>
+                {(()=>{const b=expiryBadge(f);return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:b.color+"15",border:`1px solid ${b.color}30`,borderRadius:5,padding:"2px 9px",fontSize:11,color:b.color,fontFamily:"monospace",marginBottom:12}}><span style={{width:5,height:5,borderRadius:"50%",background:b.color,display:"inline-block"}}/>{b.label}</span>);})()}
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,background:t.surfaceAlt,borderRadius:8,padding:"8px 12px"}}>
                   <span style={{color:t.textSub,fontSize:12,fontFamily:"monospace"}}>PIN:</span>
                   <span style={{color:t.text,fontFamily:"monospace",fontSize:14,letterSpacing:3,flex:1}}>{showPin[f.id]?f.pin:"••••"}</span>
                   <button onClick={()=>setShowPin(p=>({...p,[f.id]:!p[f.id]}))} style={{background:"none",border:`1px solid ${t.border}`,color:t.textSub,borderRadius:5,padding:"2px 8px",fontSize:11,cursor:"pointer",fontFamily:"monospace"}}>{showPin[f.id]?"Hide":"Show"}</button>
                 </div>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>copyLink(f)} style={{flex:1,background:copied===f.id?t.success+"20":t.surfaceAlt,border:`1px solid ${copied===f.id?t.success+"40":t.border}`,color:copied===f.id?t.success:t.textSub,borderRadius:8,padding:"9px 6px",fontSize:12,cursor:"pointer",fontFamily:"monospace",transition:"all 0.2s",whiteSpace:"nowrap"}}>
-                    {copied===f.id?"✓ Copied!":"⎘ Copy Link"}
-                  </button>
-                  <button onClick={()=>openFile(f)} title="Open in new tab"
-                    style={{background:t.accentSoft,border:`1px solid ${t.accent}30`,color:t.accent,borderRadius:8,padding:"9px 12px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                      <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                    </svg>
-                    Open
-                  </button>
-                </div>
+                {isExpired(f) ? (
+                  <div style={{background:t.danger+"10",border:`1px solid ${t.danger}25`,borderRadius:8,padding:"10px 12px",textAlign:"center",fontSize:12,color:t.danger,fontFamily:"monospace"}}>
+                    ⏰ Expired — file auto-deleted from storage
+                  </div>
+                ) : (
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>copyLink(f)} style={{flex:1,background:copied===f.id?t.success+"20":t.surfaceAlt,border:`1px solid ${copied===f.id?t.success+"40":t.border}`,color:copied===f.id?t.success:t.textSub,borderRadius:8,padding:"9px 6px",fontSize:12,cursor:"pointer",fontFamily:"monospace",transition:"all 0.2s",whiteSpace:"nowrap"}}>
+                      {copied===f.id?"✓ Copied!":"⎘ Copy Link"}
+                    </button>
+                    <button onClick={()=>openFile(f)} title="Open in new tab"
+                      style={{background:t.accentSoft,border:`1px solid ${t.accent}30`,color:t.accent,borderRadius:8,padding:"9px 12px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                      </svg>
+                      Open
+                    </button>
+                  </div>
+                )}
                 {delConfirm===f.id&&(
                   <div style={{position:"absolute",inset:0,background:dark?"rgba(7,12,20,0.96)":"rgba(255,255,255,0.96)",borderRadius:14,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,backdropFilter:"blur(2px)"}}>
                     <p style={{color:t.text,fontFamily:"monospace",fontSize:14,margin:0}}>Delete this file?</p>
@@ -530,17 +598,24 @@ function PublicPage({ username, filename, onBack, dark, onToggle }) {
 
   async function tryPin() {
     if (!file) return;
+    // Check expiry before allowing access
+    if (isExpired(file)) { setStage("expired"); return; }
     if (pin !== file.pin) {
       setStage("wrong");
       setTimeout(()=>{ setStage("enter"); setPin(""); }, 900);
       return;
     }
-    // Get signed download URL
+    // Generate signed URL
     const { data } = await supabase.storage.from("files").createSignedUrl(file.storage_path, 60);
     setDlUrl(data?.signedUrl || null);
     // Increment downloads
     await supabase.rpc("increment_downloads", { file_id: file.id });
     setStage("granted");
+    // Auto-delete if 1_download
+    if (file.expiry_type === "1_download") {
+      await supabase.storage.from("files").remove([file.storage_path]);
+      await supabase.from("files").delete().eq("id", file.id);
+    }
   }
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
@@ -564,7 +639,13 @@ function PublicPage({ username, filename, onBack, dark, onToggle }) {
               <p style={{color:t.textSub,fontSize:12,fontFamily:"monospace",margin:0}}>Shared by <b>@{username}</b> · {file.size} · {file.downloads} dl</p>
             </div>
 
-            {stage==="granted" ? (
+            {stage==="expired" ? (
+              <div style={{padding:"24px 0",textAlign:"center"}}>
+                <div style={{fontSize:44,marginBottom:14}}>⏰</div>
+                <p style={{color:t.danger,fontWeight:700,fontSize:17,margin:"0 0 8px",fontFamily:"'Playfair Display',Georgia,serif"}}>File No Longer Available</p>
+                <p style={{color:t.textSub,fontSize:13,fontFamily:"monospace",lineHeight:1.6}}>This file has expired or reached its download limit and has been permanently deleted.</p>
+              </div>
+            ) : stage==="granted" ? (
               <div style={{padding:"20px 0"}}>
                 <div style={{width:60,height:60,borderRadius:"50%",background:t.success+"20",border:`2px solid ${t.success}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>✓</div>
                 <p style={{color:t.success,fontWeight:700,fontSize:18,margin:"0 0 6px"}}>Access Granted</p>
@@ -603,23 +684,7 @@ function PublicPage({ username, filename, onBack, dark, onToggle }) {
   );
 }
 
-// ── PROTECTED ROUTE ─────────────────────────────────────────────────────────
-function ProtectedRoute({ children, authUser, profile }) {
-  if (!authUser || !profile) return <Navigate to="/login" replace />;
-  return children;
-}
 
-// ── PUBLIC FILE WRAPPER ───────────────────────────────────────────────────────
-function PublicFilePage({ dark, onToggle }) {
-  const navigate = useNavigate();
-  const params = new URLSearchParams(window.location.search);
-  const username = params.get("u");
-  const filename = params.get("f");
-  if (!username || !filename) return <Navigate to="/login" replace />;
-  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
-}
-
-// ── LANDING PAGE ──────────────────────────────────────────────────────────────
 function LandingPage() {
   const navigate = useNavigate();
   const t = T.dark;
@@ -917,6 +982,23 @@ function LandingPage() {
 }
 
 
+// ── PROTECTED ROUTE ──────────────────────────────────────────────────────────
+function ProtectedRoute({ children, authUser, profile }) {
+  if (!authUser || !profile) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// ── PUBLIC FILE WRAPPER ───────────────────────────────────────────────────────
+function PublicFilePage({ dark, onToggle }) {
+  const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const username = params.get("u");
+  const filename = params.get("f");
+  if (!username || !filename) return <Navigate to="/login" replace />;
+  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
+}
+
+// ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [dark, setDark]         = useState(true);
   const [authUser, setAuthUser] = useState(null);
@@ -934,36 +1016,15 @@ export default function App() {
 
   async function loadProfile(user) {
     const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-    if (data) {
-      setAuthUser(user);
-      setProfile({ username: data.username, displayName: data.display_name });
-    }
+    if (data) { setAuthUser(user); setProfile({ username: data.username, displayName: data.display_name }); }
     setLoading(false);
   }
 
-  async function handleLogin(user) {
-    await loadProfile(user);
-    navigate("/dashboard");
-  }
+  async function handleLogin(user) { await loadProfile(user); navigate("/dashboard"); }
+  async function handleSignup(user, prof) { setAuthUser(user); setProfile(prof); setLoading(false); navigate("/dashboard"); }
+  async function handleLogout() { await supabase.auth.signOut(); setAuthUser(null); setProfile(null); navigate("/login"); }
 
-  async function handleSignup(user, prof) {
-    setAuthUser(user);
-    setProfile(prof);
-    setLoading(false);
-    navigate("/dashboard");
-  }
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setAuthUser(null); setProfile(null);
-    navigate("/");
-  }
-
-  if (loading) return (
-    <div style={{minHeight:"100vh",background:"#070c14",display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6090",fontFamily:"monospace"}}>
-      Loading…
-    </div>
-  );
+  if (loading) return <div style={{minHeight:"100vh",background:"#070c14",display:"flex",alignItems:"center",justifyContent:"center",color:"#4a6090",fontFamily:"monospace"}}>Loading…</div>;
 
   return (
     <>
@@ -973,11 +1034,7 @@ export default function App() {
         <Route path="/login"     element={<LoginPage  onLogin={handleLogin} onGoSignup={()=>navigate("/signup")} onForgot={()=>navigate("/forgot")} dark={dark} onToggle={toggle}/>}/>
         <Route path="/signup"    element={<SignupPage onSignup={handleSignup} onGoLogin={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
         <Route path="/forgot"    element={<ForgotPage onBack={()=>navigate("/login")} dark={dark} onToggle={toggle}/>}/>
-        <Route path="/dashboard" element={
-          <ProtectedRoute authUser={authUser} profile={profile}>
-            <Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/>
-          </ProtectedRoute>
-        }/>
+        <Route path="/dashboard" element={<ProtectedRoute authUser={authUser} profile={profile}><Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/></ProtectedRoute>}/>
         <Route path="/file"      element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
         <Route path="*"          element={<Navigate to="/" replace/>}/>
       </Routes>
