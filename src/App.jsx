@@ -1080,15 +1080,55 @@ function PublicFilePage({ dark, onToggle }) {
   return <PublicPage username={username} filename={filename} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
 }
 
-// ── FRIENDLY URL WRAPPER (/:username/:slug style) ─────────────────────────────
-function FriendlyFilePage({ dark, onToggle }) {
+
+// ── PUBLIC PAGE BY SLUG ───────────────────────────────────────────────────────
+function PublicPageBySlug({ username, slug, onBack, dark, onToggle }) {
+  const t = dark ? T.dark : T.light;
+  const [file, setFile]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pin, setPin]         = useState("");
+  const [stage, setStage]     = useState("enter");
+  const [dlUrl, setDlUrl]     = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("files")
+        .select("*").eq("username", username).eq("slug", slug).single();
+      setFile(data || null);
+      setLoading(false);
+    }
+    load();
+  }, [username, slug]);
+
+  async function tryPin() {
+    if (!file) return;
+    if (isExpired(file)) { setStage("expired"); return; }
+    if (pin !== file.pin) { setStage("wrong"); setTimeout(()=>{ setStage("enter"); setPin(""); }, 900); return; }
+    const { data } = await supabase.storage.from("files").createSignedUrl(file.storage_path, 3600);
+    setDlUrl(data?.signedUrl || null);
+    await supabase.rpc("increment_downloads", { file_id: file.id });
+    setStage("granted");
+  }
+
+  return <PublicPageUI file={file} loading={loading} username={username} pin={pin} setPin={setPin}
+    stage={stage} dlUrl={dlUrl} tryPin={tryPin} onBack={onBack} t={t} dark={dark} onToggle={onToggle}/>;
+}
+
+// ── CATCH ALL — handles /username/slug friendly URLs ─────────────────────────
+function CatchAll({ dark, onToggle }) {
   const navigate = useNavigate();
-  const { username, slug } = useParams();
-  // Guard against reserved routes being matched as username/slug
+  const path = window.location.pathname; // e.g. /john/resume
+  const parts = path.split("/").filter(Boolean); // ["john", "resume"]
+
+  // Must be exactly 2 parts and not a reserved word
   const reserved = ["login","signup","forgot","dashboard","file"];
-  if (reserved.includes(username)) return <Navigate to="/" replace/>;
-  if (!username || !slug) return <Navigate to="/" replace/>;
-  return <PublicPageBySlug username={username} slug={slug} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
+  if (parts.length === 2 && !reserved.includes(parts[0])) {
+    const [username, slug] = parts;
+    return <PublicPageBySlug username={username} slug={slug} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
+  }
+
+  // Anything else → redirect home
+  return <Navigate to="/" replace/>;
 }
 
 // ── ROOT ──────────────────────────────────────────────────────────────────────
@@ -1135,9 +1175,9 @@ export default function App() {
           </ProtectedRoute>
         }/>
         <Route path="/file"           element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
-        <Route path="/:username/:slug" element={<FriendlyFilePage dark={dark} onToggle={toggle}/>}/>
-        <Route path="*"               element={<Navigate to="/" replace/>}/>
+        <Route path="*"              element={<CatchAll dark={dark} onToggle={toggle}/>}/>
       </Routes>
     </>
   );
 }
+
