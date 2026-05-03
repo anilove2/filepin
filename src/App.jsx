@@ -1084,6 +1084,10 @@ function PublicFilePage({ dark, onToggle }) {
 function FriendlyFilePage({ dark, onToggle }) {
   const navigate = useNavigate();
   const { username, slug } = useParams();
+  // Guard against reserved routes being matched as username/slug
+  const reserved = ["login","signup","forgot","dashboard","file"];
+  if (reserved.includes(username)) return <Navigate to="/" replace/>;
+  if (!username || !slug) return <Navigate to="/" replace/>;
   return <PublicPageBySlug username={username} slug={slug} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
 }
 
