@@ -1012,7 +1012,7 @@ function ProtectedRoute({ children, authUser, profile }) {
   return children;
 }
 
-}
+
 
 // ── PUBLIC PAGE (by filename) ─────────────────────────────────────────────────
 function PublicPage({ username, filename, onBack, dark, onToggle }) {
