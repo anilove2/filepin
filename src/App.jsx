@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Routes, Route, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useNavigate, Navigate, useParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 
 // ── SUPABASE ──────────────────────────────────────────────────────────────────
@@ -361,11 +361,22 @@ function UploadModal({ onClose, onUpload, t, userId, username }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr]         = useState("");
   const [expiry, setExpiry]   = useState("none");
+  const [slug, setSlug]       = useState("");
+  const [slugErr, setSlugErr] = useState("");
   const ref = useRef();
 
   async function doUpload() {
     if (!file || pin.length < 4) return;
-    setLoading(true); setErr("");
+    setLoading(true); setErr(""); setSlugErr("");
+
+    // Validate slug uniqueness if provided
+    const finalSlug = slug.trim() || null;
+    if (finalSlug) {
+      const { data: existing } = await supabase
+        .from("files").select("id").eq("username", username).eq("slug", finalSlug).single();
+      if (existing) { setSlugErr("This slug is already taken — choose another."); setLoading(false); return; }
+    }
+
     const ext  = file.name.split(".").pop().toLowerCase();
     const type = getFileType(ext);
     const path = `${userId}/${Date.now()}_${file.name}`;
@@ -377,6 +388,7 @@ function UploadModal({ onClose, onUpload, t, userId, username }) {
       size: sizeLabel, type, pin, downloads: 0,
       expiry_type: expiry,
       expires_at: getExpiresAt(expiry),
+      slug: finalSlug,
     }).select().single();
     if (dbErr) { setErr("DB error: " + dbErr.message); setLoading(false); return; }
     onUpload(data); setLoading(false); onClose();
@@ -399,6 +411,19 @@ function UploadModal({ onClose, onUpload, t, userId, username }) {
           style={{width:"100%",background:t.inputBg,border:`1.5px solid ${t.border}`,borderRadius:10,color:t.text,fontSize:15,padding:"11px 14px",outline:"none",boxSizing:"border-box",fontFamily:"monospace",marginBottom:6}}
           placeholder="e.g. 1234" maxLength={8} value={pin} onChange={e=>setPin(e.target.value.replace(/[^0-9]/g,""))}/>
         <p style={{color:t.textSub,fontSize:11,fontFamily:"monospace",marginBottom:20}}>Recipients need this PIN to access the file.</p>
+
+        <label style={{display:"block",fontSize:11,color:t.textSub,letterSpacing:1.2,textTransform:"uppercase",marginBottom:6,fontFamily:"monospace"}}>Custom URL Slug <span style={{color:t.textMuted}}>(optional)</span></label>
+        <div style={{position:"relative",marginBottom:6}}>
+          <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:t.textMuted,fontSize:12,fontFamily:"monospace",pointerEvents:"none"}}>filepin.io/{username}/</span>
+          <input
+            style={{width:"100%",background:t.inputBg,border:`1.5px solid ${slug&&slugErr?t.danger:slug?t.success:t.border}`,borderRadius:10,color:t.text,fontSize:14,padding:"11px 14px 11px 160px",outline:"none",boxSizing:"border-box",fontFamily:"monospace",transition:"border-color 0.2s"}}
+            placeholder="e.g. resume" maxLength={40} value={slug}
+            onChange={e=>setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,""))}/>
+        </div>
+        {slug && !slugErr && <p style={{color:t.success,fontSize:11,fontFamily:"monospace",marginBottom:4}}>✓ filepin.io/{username}/{slug}</p>}
+        {slugErr && <p style={{color:t.danger,fontSize:11,fontFamily:"monospace",marginBottom:4}}>⚠ {slugErr}</p>}
+        {!slug && <p style={{color:t.textMuted,fontSize:11,fontFamily:"monospace",marginBottom:4}}>Leave blank to use filename as URL</p>}
+        <div style={{height:14}}/>
         <label style={{display:"block",fontSize:11,color:t.textSub,letterSpacing:1.2,textTransform:"uppercase",marginBottom:10,fontFamily:"monospace"}}>File Availability</label>
         <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:20}}>
           {EXPIRY_OPTIONS.map(opt=>(
@@ -453,15 +478,18 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
     setDelConfirm(null);
   }
 
+  function getFileUrl(f) {
+    if (f.slug) return `${window.location.origin}/${profile.username}/${f.slug}`;
+    return `${window.location.origin}/file?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
+  }
+
   function copyLink(f) {
-    const url = `${window.location.origin}/file?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
-    navigator.clipboard?.writeText(url);
+    navigator.clipboard?.writeText(getFileUrl(f));
     setCopied(f.id); setTimeout(()=>setCopied(null), 2000);
   }
 
   function openFile(f) {
-    const url = `${window.location.origin}/file?u=${profile.username}&f=${encodeURIComponent(f.name)}`;
-    window.open(url, "_blank");
+    window.open(getFileUrl(f), "_blank");
   }
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
@@ -525,7 +553,8 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
                   <button onClick={()=>setDelConfirm(f.id)} style={{background:"none",border:"none",color:t.textMuted,fontSize:16,cursor:"pointer",lineHeight:1}}>✕</button>
                 </div>
                 <p style={{color:t.text,fontSize:15,fontWeight:700,margin:"0 0 4px",wordBreak:"break-all"}}>{f.name}</p>
-                <p style={{color:t.textSub,fontSize:12,fontFamily:"monospace",margin:"0 0 8px"}}>{f.size} · {formatDate(f.created_at)} · {f.downloads} dl</p>
+                <p style={{color:t.textSub,fontSize:12,fontFamily:"monospace",margin:"0 0 6px"}}>{f.size} · {formatDate(f.created_at)} · {f.downloads} dl</p>
+                {f.slug && <p style={{color:t.accent,fontSize:11,fontFamily:"monospace",margin:"0 0 6px",letterSpacing:0.3}}>/{profile.username}/{f.slug}</p>}
                 {(()=>{const b=expiryBadge(f);return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:b.color+"15",border:`1px solid ${b.color}30`,borderRadius:5,padding:"2px 9px",fontSize:11,color:b.color,fontFamily:"monospace",marginBottom:12}}><span style={{width:5,height:5,borderRadius:"50%",background:b.color,display:"inline-block"}}/>{b.label}</span>);})()}
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,background:t.surfaceAlt,borderRadius:8,padding:"8px 12px"}}>
                   <span style={{color:t.textSub,fontSize:12,fontFamily:"monospace"}}>PIN:</span>
@@ -569,44 +598,10 @@ function Dashboard({ authUser, profile, onLogout, dark, onToggle }) {
   );
 }
 
-// ── PUBLIC FILE PAGE ──────────────────────────────────────────────────────────
-function PublicPage({ username, filename, onBack, dark, onToggle }) {
-  const t = dark ? T.dark : T.light;
-  const [file, setFile]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [pin, setPin]     = useState("");
-  const [stage, setStage] = useState("enter");
-  const [dlUrl, setDlUrl] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from("files")
-        .select("*").eq("username", username).eq("name", filename).single();
-      setFile(data || null);
-      setLoading(false);
-    }
-    load();
-  }, [username, filename]);
-
-  async function tryPin() {
-    if (!file) return;
-    if (isExpired(file)) { setStage("expired"); return; }
-    if (pin !== file.pin) {
-      setStage("wrong");
-      setTimeout(()=>{ setStage("enter"); setPin(""); }, 900);
-      return;
-    }
-    // 1 hour signed URL — safe for any connection speed
-    const { data } = await supabase.storage.from("files").createSignedUrl(file.storage_path, 3600);
-    setDlUrl(data?.signedUrl || null);
-    // Increment — this is what gates future access for 1_download files
-    await supabase.rpc("increment_downloads", { file_id: file.id });
-    setStage("granted");
-    // Actual storage deletion is handled by the hourly Edge Function cron
-  }
-
+// ── PUBLIC PAGE UI (shared renderer) ─────────────────────────────────────────
+function PublicPageUI({ file, loading, username, pin, setPin, stage, dlUrl, tryPin, onBack, t, dark, onToggle }) {
   const formatDate = (iso) => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
-
   return (
     <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,transition:"background 0.3s",position:"relative",overflow:"hidden"}}>
       <BgGrid t={t}/>
@@ -972,20 +967,99 @@ function LandingPage() {
 }
 
 
+
+// ── PUBLIC PAGE BY SLUG ───────────────────────────────────────────────────────
+function PublicPageBySlug({ username, slug, onBack, dark, onToggle }) {
+  const t = dark ? T.dark : T.light;
+  const [file, setFile]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pin, setPin]     = useState("");
+  const [stage, setStage] = useState("enter");
+  const [dlUrl, setDlUrl] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("files")
+        .select("*").eq("username", username).eq("slug", slug).single();
+      setFile(data || null);
+      setLoading(false);
+    }
+    load();
+  }, [username, slug]);
+
+  async function tryPin() {
+    if (!file) return;
+    if (isExpired(file)) { setStage("expired"); return; }
+    if (pin !== file.pin) {
+      setStage("wrong");
+      setTimeout(()=>{ setStage("enter"); setPin(""); }, 900);
+      return;
+    }
+    const { data } = await supabase.storage.from("files").createSignedUrl(file.storage_path, 3600);
+    setDlUrl(data?.signedUrl || null);
+    await supabase.rpc("increment_downloads", { file_id: file.id });
+    setStage("granted");
+  }
+
+  // Reuse same UI as PublicPage
+  return <PublicPageUI file={file} loading={loading} username={username} pin={pin} setPin={setPin}
+    stage={stage} dlUrl={dlUrl} tryPin={tryPin} onBack={onBack} t={t} dark={dark} onToggle={onToggle}/>;
+}
+
 // ── PROTECTED ROUTE ───────────────────────────────────────────────────────────
 function ProtectedRoute({ children, authUser, profile }) {
   if (!authUser || !profile) return <Navigate to="/login" replace />;
   return children;
 }
 
-// ── PUBLIC FILE WRAPPER ───────────────────────────────────────────────────────
+}
+
+// ── PUBLIC PAGE (by filename) ─────────────────────────────────────────────────
+function PublicPage({ username, filename, onBack, dark, onToggle }) {
+  const t = dark ? T.dark : T.light;
+  const [file, setFile]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pin, setPin]         = useState("");
+  const [stage, setStage]     = useState("enter");
+  const [dlUrl, setDlUrl]     = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("files")
+        .select("*").eq("username", username).eq("name", filename).single();
+      setFile(data || null); setLoading(false);
+    }
+    load();
+  }, [username, filename]);
+
+  async function tryPin() {
+    if (!file) return;
+    if (isExpired(file)) { setStage("expired"); return; }
+    if (pin !== file.pin) { setStage("wrong"); setTimeout(()=>{ setStage("enter"); setPin(""); }, 900); return; }
+    const { data } = await supabase.storage.from("files").createSignedUrl(file.storage_path, 3600);
+    setDlUrl(data?.signedUrl || null);
+    await supabase.rpc("increment_downloads", { file_id: file.id });
+    setStage("granted");
+  }
+
+  return <PublicPageUI file={file} loading={loading} username={username} pin={pin} setPin={setPin}
+    stage={stage} dlUrl={dlUrl} tryPin={tryPin} onBack={onBack} t={t} dark={dark} onToggle={onToggle}/>;
+}
+// ── PUBLIC FILE WRAPPER (query param style) ──────────────────────────────────
 function PublicFilePage({ dark, onToggle }) {
   const navigate = useNavigate();
   const params = new URLSearchParams(window.location.search);
   const username = params.get("u");
   const filename = params.get("f");
-  if (!username || !filename) return <Navigate to="/login" replace />;
-  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/login")} dark={dark} onToggle={onToggle}/>;
+  if (!username || !filename) return <Navigate to="/" replace />;
+  return <PublicPage username={username} filename={filename} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
+}
+
+// ── FRIENDLY URL WRAPPER (/:username/:slug style) ─────────────────────────────
+function FriendlyFilePage({ dark, onToggle }) {
+  const navigate = useNavigate();
+  const { username, slug } = useParams();
+  return <PublicPageBySlug username={username} slug={slug} onBack={()=>navigate("/")} dark={dark} onToggle={onToggle}/>;
 }
 
 // ── ROOT ──────────────────────────────────────────────────────────────────────
@@ -1031,8 +1105,9 @@ export default function App() {
             <Dashboard authUser={authUser} profile={profile} onLogout={handleLogout} dark={dark} onToggle={toggle}/>
           </ProtectedRoute>
         }/>
-        <Route path="/file"      element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
-        <Route path="*"          element={<Navigate to="/" replace/>}/>
+        <Route path="/file"           element={<PublicFilePage dark={dark} onToggle={toggle}/>}/>
+        <Route path="/:username/:slug" element={<FriendlyFilePage dark={dark} onToggle={toggle}/>}/>
+        <Route path="*"               element={<Navigate to="/" replace/>}/>
       </Routes>
     </>
   );
